@@ -1,0 +1,78 @@
+# Qt 6
+
+Most of the formatters and the test files are based on the Nativs files from Qt
+([narnaud/natvis4qt](https://github.com/narnaud/natvis4qt/)).
+
+## Types
+
+- [ ] `QBasicAtomicInteger<*>`
+- [ ] `QBasicAtomicPointer<*>`
+- [ ] `QBasicAtomicPointer<void>`
+- [x] `QByteArray`
+- [ ] `QCborArray`
+- [ ] `QCborContainerPrivate` (only the JSON subset)
+- [ ] `QCborMap`
+- [ ] `QCborValue` (only the JSON subset)
+- [x] `QCheckedInt<*>`
+- [x] `QChar`
+- [x] `QDate`
+- [x] `QDateTime`
+- [ ] `QDir`
+- [ ] `QFile`
+- [ ] `QFileInfo`
+- [x] `QFlags<*>`
+- [ ] `QGenericMatrix<*,*,*>`
+- [x] `QHash<*,*>`
+- [ ] `QHostAddress`
+- [ ] `QImage`
+- [x] `QJsonArray`
+- [x] `QJsonDocument`
+- [x] `QJsonObject`
+- [x] `QJsonValue`
+- [ ] `QJsonValueConstRef`
+- [ ] `QJsonValueRef`
+- [ ] `QLine`
+- [ ] `QLineF`
+- [x] `QList<*>`
+- [x] `QMap<*,*>`
+- [ ] `QMatrix2x2`
+- [ ] `QMatrix2x3`
+- [ ] `QMatrix2x4`
+- [ ] `QMatrix3x2`
+- [ ] `QMatrix3x3`
+- [ ] `QMatrix3x4`
+- [ ] `QMatrix4x2`
+- [ ] `QMatrix4x3`
+- [ ] `QMatrix4x4`
+- [x] `QMultiHash<*,*>`
+- [x] `QMultiMap<*,*>`
+- [ ] `QObject`
+- [ ] `QPair<*,*>`
+- [ ] `QPixmap`
+- [x] `QPoint`
+- [x] `QPointF`
+- [ ] `QPolygon`
+- [ ] `QPolygonF`
+- [ ] `QPropertyData<*>`
+- [ ] `QQuickItem`
+- [ ] `QQuickItemPrivate`
+- [x] `QRect`
+- [x] `QRectF`
+- [x] `QSet<*>`
+- [x] `QSize`
+- [x] `QSizeF`
+- [ ] `QSizePolicy`
+- [ ] `QSpan<*>`
+- [ ] `QSpecialInteger<*>`
+- [x] `QString`
+- [ ] `QStringRef`
+- [x] `QStringView`
+- [x] `QTime`
+- [ ] `QUrl`
+- [x] `QUuid`
+- [x] `QVarLengthArray<*,*>`
+- [ ] `QVariant`
+- [ ] `QVector2D`
+- [ ] `QVector3D`
+- [ ] `QVector4D`
+- [ ] `QVector<*>`

@@ -1,0 +1,29 @@
+class QDateTimeConstants:
+    MSECS_PER_SEC = 1000
+    SECS_PER_MIN = 60
+    MINS_PER_HOUR = 60
+    SECS_PER_HOUR = SECS_PER_MIN * MINS_PER_HOUR
+    SECS_PER_DAY = SECS_PER_HOUR * 24
+    MSECS_PER_MIN = SECS_PER_MIN * MSECS_PER_SEC
+    MSECS_PER_HOUR = SECS_PER_HOUR * MSECS_PER_SEC
+    MSECS_PER_DAY = SECS_PER_DAY * MSECS_PER_SEC
+
+    JULIAN_DAY_FOR_EPOCH = 2440588
+    """result of QDate(1970, 1, 1).toJulianDay()"""
+    JULIAN_DAY_MAX = 784354017364
+    JULIAN_DAY_MIN = -784350574879
+
+    STATUS_TIME_SPEC_MASK = 0x30
+    STATUS_TIME_SPEC_SHIFT = 4
+    """corelib/time/qdatetime_p.h (QDateTimePrivate::StatusFlag::TimeSpecMask)"""
+    STATUS_VALID_DATETIME_MASK = 0x06
+    TIME_SPEC_LOCAL = 0
+
+
+class QHashConstants:
+    """QHashPrivate::SpanConstants"""
+
+    SPAN_SHIFT = 7
+    N_ENTRIES = 1 << SPAN_SHIFT
+    ELEMENT_MASK = N_ENTRIES - 1
+    UNUSED_ENTRY = 0xFF

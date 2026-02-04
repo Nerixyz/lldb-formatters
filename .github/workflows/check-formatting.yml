@@ -1,0 +1,25 @@
+name: Check formatting
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: clang-format
+        uses: RafikFarhad/clang-format-github-action@v6
+        with:
+          sources: "**/*.hpp,**/*.h,**/*.cpp,"
+          style: file
+
+      - name: Prettier
+        run: |
+          npm i -g prettier
+          prettier -c .
