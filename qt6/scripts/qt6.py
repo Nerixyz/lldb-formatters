@@ -47,6 +47,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QDateTime")
     add_summary("QByteArray")
     add_summary("QCborValue")
+    add_summary("QJsonDocument")
     add_summary("QtCborElement", other_names=["QtCbor::Element"])
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
@@ -296,6 +297,24 @@ def _QtCborLikeSummary(valobj: SBValue, ty: int, v: Callable[[], SBValue]):
     return "unknown"
 
 
+def QJsonDocumentSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    d_ptr: SBValue = raw.GetChildAtIndex(0).GetSyntheticValue().GetChildAtIndex(0)
+    if d_ptr.GetValueAsAddress() == 0:
+        return "null"
+    size = valobj.GetNumChildren()
+    ty = valobj.GetChildAtIndex(_CborSyntheticProviderBase.TYPE_INDEX)
+    match ty.GetValueAsUnsigned():
+        case QCborValueType.MAP:
+            return f"{{ size={size} }}"
+        case QCborValueType.ARRAY:
+            return f"[ size={size} ]"
+        case _:
+            return "(invalid)"
+
+
 class _FirstChildSyntheticProvider(lldb.SBSyntheticValueProvider):
     def __init__(self, valobj: SBValue, internal_dict):
         self._backend = valobj
@@ -382,13 +401,12 @@ class QJsonDocumentSyntheticProvider(_ExpandingSyntheticProvider):
         ).GetPointerType()
 
     def _get_value(self, valobj: SBValue) -> SBValue:
-        return (
-            valobj.GetChildAtIndex(0)
-            .GetSyntheticValue()
-            .GetChildAtIndex(0)
-            .Cast(self._priv)
-            .GetChildMemberWithName("value")
+        d_ptr: SBValue = (
+            valobj.GetChildAtIndex(0).GetSyntheticValue().GetChildAtIndex(0)
         )
+        if d_ptr.GetValueAsAddress() == 0:
+            return SBValue()
+        return d_ptr.Cast(self._priv).GetChildMemberWithName("value")
 
 
 class _ArraySyntheticProvider:
@@ -925,6 +943,8 @@ class QCborValueFlag:
 
 
 class _CborSyntheticProviderBase:
+    TYPE_INDEX = (1 << 32) - 1
+
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
         QCborValueType.load(valobj.target)
@@ -944,9 +964,13 @@ class _CborSyntheticProviderBase:
         return self._size
 
     def get_child_index(self, name: str):
+        if name == "[type]":
+            return self.TYPE_INDEX
         return _numeric_index(name)
 
     def get_child_at_index(self, idx: int):
+        if idx == self.TYPE_INDEX:  # [type]
+            return _valobj_from_signed(self._valobj, self._typ)
         if self._is_simple or idx < 0 or idx >= self._size or not self._elements:
             return
         if self._typ == QCborValueType.ARRAY:
@@ -1137,7 +1161,7 @@ def _numeric_index(name: str) -> int | None:
 def _qdatetime_data(valobj: SBValue) -> tuple[datetime.datetime, bool] | None:
     d: SBValue = valobj.GetChildMemberWithName("d")
     d_ptr: SBValue = d.GetChildMemberWithName("d")
-    d_val = d_ptr.unsigned
+    d_val = d_ptr.GetValueAsAddress()
     is_short = (d_val & 1) != 0
     if is_short:
         status = d_val & 0xFF
