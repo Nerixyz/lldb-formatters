@@ -30,3 +30,23 @@ When running with lldb-dap, having `enableSyntheticChildDebugging` enabled helps
 > [!NOTE]
 >
 > Some formatters, most notably the ones for the `QJson*` types, require Qt to be compiled with debug info. On Windows, add the debug info files when installing and use `settings append target.debug-file-search-paths <path-to>/msvc2022_64/bin` to add the files to the search path.
+
+### Lua
+
+WIP
+
+### Sol2
+
+WIP
+
+### Boost.Unordered
+
+TODO
+
+### Boost.Json
+
+TODO
+
+### Rapidjson
+
+TODO
