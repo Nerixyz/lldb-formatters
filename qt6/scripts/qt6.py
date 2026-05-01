@@ -10,7 +10,7 @@ from lldb import (
     SBTypeList,
 )
 from typing import Callable
-from constants import QDateTimeConstants, QHashConstants
+from qt_constants import QDateTimeConstants, QHashConstants
 import datetime
 
 

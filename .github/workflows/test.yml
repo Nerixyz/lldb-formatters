@@ -1,0 +1,49 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    name: 🧪 Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: 🪟 Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        if: runner.os == 'Windows'
+        with:
+          version: "22.1"
+
+      - name: 🪟 Enable Developer Command Prompt
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          cache: true
+          cache-key-prefix: ${{ runner.os }}-Qt
+          version: 6.10.3
+
+      - name: Configure
+        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
+
+      - name: Build
+        run: ninja -C build
+
+      - name: Test
+        working-directory: build
+        run: ctest -j --output-on-failure
