@@ -22,7 +22,7 @@ jobs:
           submodules: recursive
 
       - name: 🪟 Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
+        uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
         if: runner.os == 'Windows'
         with:
           version: "22.1"
