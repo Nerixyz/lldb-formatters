@@ -16,6 +16,7 @@ if(NOT LLDB_PYTHON_PATH)
     )
     set(LLDB_PYTHON_PATH "${_lldb_python_path}" CACHE STRING "Path to lldb.py" FORCE)
 endif()
+message(STATUS "LLDB Python path: ${LLDB_PYTHON_PATH}")
 
 function(create_python_test)
     set(_options AUTO_QT)

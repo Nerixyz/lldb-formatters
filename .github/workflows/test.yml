@@ -27,6 +27,11 @@ jobs:
         with:
           version: "22.1"
 
+      - name: 🪟 🐛 Fix LLDB .pyd
+        shell: powershell
+        run: |
+          mv "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.abi3None" "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.pyd"
+
       - name: 🪟 Enable Developer Command Prompt
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1.13.0
@@ -37,6 +42,13 @@ jobs:
         if: runner.os == 'Windows'
         with:
           python-version: "3.11" # Matches the python used in LLDB
+
+      - name: 🪟 Use clang-cl
+        shell: bash
+        run: |
+          echo "CC=clang-cl" >> "$GITHUB_ENV"
+          echo "CXX=clang-cl" >> "$GITHUB_ENV"
+
       - name: Install Qt6
         uses: jurplel/install-qt-action@v4.3.1
         with:
