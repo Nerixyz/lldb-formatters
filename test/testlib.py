@@ -143,6 +143,11 @@ class TestCase(unittest.TestCase):
         return tgt, thread, breakpoint
 
 
+class ChildCheck:
+    def check(self, test: TestCase, val: SBValue, start: int, msg: str) -> int:
+        raise NotImplementedError()
+
+
 @dataclass
 class ValueCheck:
     name: str | re.Pattern | None = None
@@ -151,7 +156,7 @@ class ValueCheck:
     type: str | re.Pattern | None = None
 
     # list[Any] should be list[T] where T: ChildCheck
-    children: list["ValueCheck"] | list[Any] | "ChildCheck" | None = None
+    children: list["ValueCheck"] | list[Any] | ChildCheck | None = None
 
     def check(self, test: TestCase, val: SBValue, error_msg=None):
         msg = (
@@ -200,11 +205,6 @@ class ValueCheck:
         for check in c:
             start = check.check(test, val, start, msg)
         test.assertEqual(start, val.GetNumChildren())
-
-
-class ChildCheck:
-    def check(self, test: TestCase, val: SBValue, start: int, msg: str) -> int:
-        raise NotImplementedError()
 
 
 class ChildrenStartsWith(ChildCheck):
