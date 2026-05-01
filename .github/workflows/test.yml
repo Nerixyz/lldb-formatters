@@ -1,0 +1,67 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    name: 🧪 Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: 🪟 Install LLVM and Clang
+        uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
+        if: runner.os == 'Windows'
+        with:
+          version: "22.1"
+
+      - name: 🪟 🐛 Fix LLDB .pyd
+        shell: powershell
+        run: |
+          mv "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.abi3None" "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.pyd"
+
+      - name: 🪟 Enable Developer Command Prompt
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+
+      - name: 🪟 Use clang-cl
+        shell: bash
+        run: |
+          echo "CC=clang-cl" >> "$GITHUB_ENV"
+          echo "CXX=clang-cl" >> "$GITHUB_ENV"
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v4.3.1
+        with:
+          cache: true
+          cache-key-prefix: ${{ runner.os }}-Qt
+          version: 6.10.3
+
+      - name: 🪟 Install Python
+        uses: actions/setup-python@v6
+
+        if: runner.os == 'Windows'
+        with:
+          python-version: "3.11" # Matches the python used in LLDB
+
+      - name: Configure
+        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
+
+      - name: Build
+        run: ninja -C build
+
+      - name: Test
+        working-directory: build
+        run: ctest -j --output-on-failure

@@ -12,9 +12,18 @@ When running with lldb-dap, having `enableSyntheticChildDebugging` enabled helps
 > [!NOTE]
 >
 > When running on Windows, consider linking with LLD instead of the default linker (`link.exe`).
-> There are some bugs with LLDB and PDBs produced by `link.exe` with incremental linking that I haven't been able to reliably reproduce.
+> There are some bugs with LLDB and PDBs produced by `link.exe` with incremental linking (https://github.com/llvm/llvm-project/issues/187883).
 
 ## Test
+
+Use the `build-test-debug` preset to build and test the project:
+
+```
+cmake --preset base-test-debug
+cd build
+ninja
+ctest
+```
 
 ## Libraries
 
@@ -31,13 +40,30 @@ When running with lldb-dap, having `enableSyntheticChildDebugging` enabled helps
 >
 > Some formatters, most notably the ones for the `QJson*` types, require Qt to be compiled with debug info. On Windows, add the debug info files when installing and use `settings append target.debug-file-search-paths <path-to>/msvc2022_64/bin` to add the files to the search path.
 
-### Lua
+### Lua and Sol2
 
-WIP
+Both Lua and sol2 share the same Python file.
 
-### Sol2
+- **Lua Version**: 5.4
+- **Directory**: `sol2-lua`
+- **Available Types**:
+  - [x] `TValue`
+  - [x] `TString`
+  - [x] `Table`
+  - [x] `CClosure`
+  - [x] `global_State`
+  - [x] `lua_State`
+  - [x] `Udata`
+  - [x] `sol::variadic_args`
+  - [x] `sol::basic_reference`
+  - [x] `sol::basic_object`
+  - [x] `sol::basic_table_core`
+  - [x] `sol::basic_protected_function`
 
-WIP
+- **Install**:
+  ```sh
+  command script import <path-to>/sol2-lua/scripts/lua.py
+  ```
 
 ### Boost.Unordered
 

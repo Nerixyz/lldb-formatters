@@ -11,3 +11,7 @@ target_link_libraries(sol2-lua-test PRIVATE
     sol2
     LuaWrap
 )
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

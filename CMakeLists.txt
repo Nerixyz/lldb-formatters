@@ -6,5 +6,11 @@ set(CMAKE_CXX_STANDARD 20)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
 
+if(BUILD_TESTING)
+    enable_testing()
+    include(CTest)
+    include(LLDBTesting)
+endif()
+
 add_subdirectory(qt6)
 add_subdirectory(sol2-lua)

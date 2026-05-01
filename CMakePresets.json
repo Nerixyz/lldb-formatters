@@ -9,6 +9,13 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true
       }
+    },
+    {
+      "name": "base-test-debug",
+      "inherits": "base-debug",
+      "cacheVariables": {
+        "BUILD_TESTING": true
+      }
     }
   ]
 }
