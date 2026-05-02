@@ -1,5 +1,6 @@
 import testlib
 from testlib import ValueCheck
+import re
 
 
 class TestQJsonObject(testlib.TestCase):
@@ -34,7 +35,8 @@ class TestQJsonObject(testlib.TestCase):
                     ValueCheck(name="[3]", value="1234567890", summary=""),
                     ValueCheck(name="[4]", summary="null"),
                     ValueCheck(name="[5]", summary='"stringAscii"'),
-                    ValueCheck(name="[6]", summary='u"utf16💔"'),
+                    # FIXME: LLDB before 23 doesn't use the array bounds for strings
+                    ValueCheck(name="[6]", summary=re.compile('^u"utf16💔')),
                     ValueCheck(name="[7]", summary='""'),
                     ValueCheck(
                         name="[8]",

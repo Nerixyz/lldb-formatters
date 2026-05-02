@@ -1,5 +1,6 @@
 import testlib
 from testlib import ValueCheck
+import re
 
 
 class TestQJsonObject(testlib.TestCase):
@@ -27,7 +28,11 @@ class TestQJsonObject(testlib.TestCase):
         self.assertVarPath("vInt64", ValueCheck(value="-42", children=[]))
         self.assertVarPath("vDouble", ValueCheck(value="1.75", children=[]))
         self.assertVarPath("vStr", ValueCheck(summary='"str"', children=[]))
-        self.assertVarPath("vStrUtf16", ValueCheck(summary='u"str🚧"', children=[]))
+        self.assertVarPath(
+            # FIXME: LLDB before 23 doesn't use the array bounds for strings
+            "vStrUtf16",
+            ValueCheck(summary=re.compile('^u"str🚧'), children=[]),
+        )
         self.assertVarPath("vStrEmpty", ValueCheck(summary='""', children=[]))
         self.assertVarPath(
             "vArray",
