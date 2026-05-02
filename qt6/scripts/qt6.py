@@ -10,15 +10,26 @@ from lldb import (
     SBTypeList,
 )
 from typing import Callable
-from qt_constants import QDateTimeConstants, QHashConstants
+from qt_constants import (
+    QDateTimeConstants,
+    QHashConstants,
+    QCborValueType,
+    QtCborElementValueFlag,
+    QCBORVALUE_NULL,
+    QCBORVALUE_UNDEFINED,
+)
 import datetime
+import weakref
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
     dbg.HandleCommand("type category define -e qt -l c++")
 
     def add_summary(
-        type_name: str, *, regex: str | None = None, other_names: list[str] = []
+        type_name: str,
+        *,
+        regex: str | None = None,
+        other_names: list[str] = [],
     ):
         type_names = other_names + [type_name]
         cmd = f"type summary add -w qt -F {__name__}.{type_name}SummaryProvider "
@@ -29,7 +40,10 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
         dbg.HandleCommand(cmd)
 
     def add_synthetic(
-        name: str, *, regex: str | None = None, other_names: list[str] = []
+        name: str,
+        *,
+        regex: str | None = None,
+        other_names: list[str] = [],
     ):
         cmd = f"type synthetic add -w qt -l {__name__}.{name}SyntheticProvider"
         if regex:
@@ -48,7 +62,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QByteArray")
     add_summary("QCborValue")
     add_summary("QJsonDocument")
-    add_summary("QtCborElement", other_names=["QtCbor::Element"])
+    add_summary("QJsonValue")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Multi)?Hash<.*>$", "size=${svar%#}", regex=True)
@@ -78,9 +92,8 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
         "(x: ${var.xp}, y: ${var.yp}, width: ${var.w}, height: ${var.h})",
     )
     _add_summary_string(dbg, "QChar", "${var.ucs}")
-    _add_summary_string(dbg, "QJsonValue", "${var.value}")
-    _add_summary_string(dbg, "QJsonObject", "\\{ size=${svar%#} \\}")
-    _add_summary_string(dbg, "QJsonArray", "[ size=${svar%#} ]")
+    _add_summary_string(dbg, ["QJsonObject", "QCborMap"], "\\{ size=${svar%#} \\}")
+    _add_summary_string(dbg, ["QJsonArray", "QCborArray"], "[ size=${svar%#} ]")
 
     add_synthetic("QCheckedInt", regex="^QtPrivate::QCheckedIntegers::QCheckedInt<.*>$")
     add_synthetic("QList", regex="^QList<.*>$")
@@ -101,11 +114,10 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QVarLengthArray", regex="^QVarLengthArray<.*>$")
     add_synthetic("QFlags", regex="^QFlags<.*>$")
     add_synthetic("QJsonDocument")
-    add_synthetic("QJsonObject")
-    add_synthetic("QJsonArray")
+    add_synthetic("QCborMap", other_names=["QJsonObject"])
+    add_synthetic("QCborArray", other_names=["QJsonArray"])
     add_synthetic("QJsonValue")
     add_synthetic("QCborValue")
-    add_synthetic("QtCborElement", other_names=["QtCbor::Element"])
 
 
 def _add_summary_string(
@@ -234,85 +246,66 @@ def QDateTimeSummaryProvider(
     return dt.strftime(f"%Y-%m-%d %X{ms_part} %Z")
 
 
-def QtCborElementSummaryProvider(
-    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
-    QCborValueType.load(valobj.GetTarget())
-    raw: SBValue = valobj.GetNonSyntheticValue()
-    ty = raw.GetChildMemberWithName("type").unsigned
-    return _QtCborLikeSummary(
-        valobj, ty, lambda: raw.GetChildAtIndex(0).GetChildMemberWithName("value")
-    )
+def get_sizet_ptr(target: SBTarget) -> SBType:
+    return target.GetBasicType(lldb.eBasicTypeLongLong).GetPointerType()
 
 
 def QCborValueSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> str | None:
-    QCborValueType.load(valobj.GetTarget())
     raw: SBValue = valobj.GetNonSyntheticValue()
-    ty = raw.GetChildMemberWithName("t").unsigned
-    if ty == QCborValueType.STRING:
-        ptr = valobj.GetTarget().FindFirstType("QCborContainerPrivate").GetPointerType()
-        container: SBValue = raw.GetChildMemberWithName("container").Cast(ptr)
-        if container:
-            el = (
-                container.GetChildMemberWithName("elements")
-                .GetSyntheticValue()
-                .GetChildAtIndex(0)
-                .GetNonSyntheticValue()
-            )
-            data_ptr = (
-                container.GetChildMemberWithName("data")
-                .GetChildAtIndex(0)
-                .GetChildMemberWithName("ptr")
-                .GetValueAsAddress()
-            )
-            return _CborSyntheticProviderBase._static_get_string_for(
-                valobj, el, data_ptr
+    match raw.GetChildMemberWithName("t").GetValueAsUnsigned():
+        case QCborValueType.Integer:
+            return ""  # Use synthetic value
+        case QCborValueType.Double:
+            return ""
+        case QCborValueType.String:
+            return valobj.GetChildAtIndex(
+                QCborValueSyntheticProvider.VALUE_INDEX
             ).GetSummary()
-
-    return _QtCborLikeSummary(valobj, ty, lambda: raw.GetChildMemberWithName("n"))
-
-
-def _QtCborLikeSummary(valobj: SBValue, ty: int, v: Callable[[], SBValue]):
-    match ty:
-        case QCborValueType.INTEGER:
-            return v().signed
-        case QCborValueType.DOUBLE:
-            return v().GetData().double[0]
-        case QCborValueType.STRING:
-            return "(string)"
-        case QCborValueType.ARRAY:
+        case QCborValueType.Array:
             return f"[ size={valobj.GetNumChildren()} ]"
-        case QCborValueType.MAP:
+        case QCborValueType.Map:
             return f"{{ size={valobj.GetNumChildren()} }}"
-        case QCborValueType.FALSE:
-            return "false"
-        case QCborValueType.TRUE:
-            return "true"
-        case QCborValueType.NULL:
+        case QCborValueType.CFalse:
+            return ""
+        case QCborValueType.CTrue:
+            return ""
+        case QCborValueType.Null:
             return "null"
-        case QCborValueType.UNDEFINED:
+        case QCborValueType.Undefined:
             return "undefined"
-    return "unknown"
+        case x:
+            return f"(unknown type {x})"
 
 
 def QJsonDocumentSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> str | None:
     raw: SBValue = valobj.GetNonSyntheticValue()
-    d_ptr: SBValue = raw.GetChildAtIndex(0).GetSyntheticValue().GetChildAtIndex(0)
+    void_ptr = valobj.GetTarget().GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+    d_ptr: SBValue = raw.GetChildAtIndex(0).Cast(void_ptr)
     if d_ptr.GetValueAsAddress() == 0:
         return "null"
     size = valobj.GetNumChildren()
-    ty = valobj.GetChildAtIndex(_CborSyntheticProviderBase.TYPE_INDEX)
+    ty = valobj.GetChildAtIndex(QCborValueSyntheticProvider.TYPE_INDEX)
     match ty.GetValueAsUnsigned():
-        case QCborValueType.MAP:
+        case QCborValueType.Map:
             return f"{{ size={size} }}"
-        case QCborValueType.ARRAY:
+        case QCborValueType.Array:
             return f"[ size={size} ]"
         case _:
             return "(invalid)"
+
+
+def QJsonValueSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    v: SBValue = valobj.GetNonSyntheticValue().GetChildAtIndex(0).GetSyntheticValue()
+    s = v.GetSummary()
+    if s is None:
+        return ""
+    return s
 
 
 class _FirstChildSyntheticProvider(lldb.SBSyntheticValueProvider):
@@ -396,17 +389,13 @@ class QSetSyntheticProvider(_ExpandingSyntheticProvider):
 class QJsonDocumentSyntheticProvider(_ExpandingSyntheticProvider):
     def __init__(self, valobj: SBValue, internal_dict):
         super().__init__(valobj, internal_dict)
-        self._priv = valobj.target.FindFirstType(
-            "QJsonDocumentPrivate"
-        ).GetPointerType()
+        self._cbor_ptr = valobj.GetTarget().FindFirstType("QCborValue").GetPointerType()
 
     def _get_value(self, valobj: SBValue) -> SBValue:
-        d_ptr: SBValue = (
-            valobj.GetChildAtIndex(0).GetSyntheticValue().GetChildAtIndex(0)
-        )
+        d_ptr: SBValue = valobj.GetChildAtIndex(0).Cast(self._cbor_ptr)
         if d_ptr.GetValueAsAddress() == 0:
             return SBValue()
-        return d_ptr.Cast(self._priv).GetChildMemberWithName("value")
+        return d_ptr.Dereference().GetSyntheticValue()
 
 
 class _ArraySyntheticProvider:
@@ -697,6 +686,7 @@ class QDateSyntheticProvider(_DispatchedSynthetic):
 class QDateTimeSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
+        self._date = None
 
     def update(self):
         data = _qdatetime_data(self._valobj)
@@ -901,234 +891,334 @@ class QHashPrivateNodeSyntheticProvider:
         return None
 
 
-class QCborValueType:
-    INTEGER: int
-    DOUBLE: int
-    STRING: int
-    ARRAY: int
-    MAP: int
-    FALSE: int
-    TRUE: int
-    NULL: int
-    UNDEFINED: int
-    _loaded = False
+class LazyType:
+    def __init__(self, tgt: SBTarget, names: str | tuple[str, ...]):
+        self.tgt = tgt
+        self.names = (names,) if isinstance(names, str) else names
+        self.ty = None
 
-    @staticmethod
-    def load(target: SBTarget):
-        if QCborValueType._loaded:
-            return
-        members = target.FindFirstType("QCborValue::Type").enum_members
-        m = {v.name: v.unsigned for v in members}
-        QCborValueType.INTEGER = m["Integer"]
-        QCborValueType.DOUBLE = m["Double"]
-        QCborValueType.STRING = m["String"]
-        QCborValueType.ARRAY = m["Array"]
-        QCborValueType.MAP = m["Map"]
-        QCborValueType.FALSE = m["False"]
-        QCborValueType.TRUE = m["True"]
-        QCborValueType.NULL = m["Null"]
-        QCborValueType.UNDEFINED = m["Undefined"]
-        QCborValueType._loaded = True
-
-    @staticmethod
-    def is_simple(ty: int):
-        return ty != QCborValueType.ARRAY and ty != QCborValueType.MAP
+    def __call__(self) -> SBType:
+        if self.ty is None:
+            for n in self.names:
+                self.ty = self.tgt.FindFirstType(n)
+                if self.ty:
+                    break
+        return self.ty  # type: ignore
 
 
-class QCborValueFlag:
-    IS_CONTAINER = 1
-    HAS_BYTE_DATA = 2
-    STRING_IS_UTF16 = 4
-    STRING_IS_ASCII = 8
+# struct QtCbor::Element {
+#   union {
+#     qint64 value;
+#     QCborContainerPrivate *container;
+#   };
+#   QCborValue::Type type;
+#   ValueFlag flags;
+# };
+
+# struct QCborContainerPrivate {
+#   qsizetype usedData = 0;
+#   QByteArray data;
+#   QList<QtCbor::Element> elements;
+# };
 
 
-class _CborSyntheticProviderBase:
-    TYPE_INDEX = (1 << 32) - 1
-
+class _CborContainerSyntheticProviderBase:
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
-        QCborValueType.load(valobj.target)
-        self._typ = QCborValueType.UNDEFINED
-        self._is_simple = True
         self._size = 0
         self._target: SBTarget = valobj.target
         self._process: SBProcess = valobj.process
-        self._elements: SBValue | None = None
+        self._elements_ptr = 0
         self._data_ptr = 0
-        self._byte_data_ty = self._target.FindFirstType(
-            "QtCbor::ByteData"
-        ).GetPointerType()
+        self._sizet_ptr = get_sizet_ptr(self._target)
         self._pointer_size = self._process.GetAddressByteSize()
+        self._array_ty = LazyType(self._target, ("QJsonArray", "QCborArray"))
+        self._map_ty = LazyType(self._target, ("QJsonObject", "QCborMap"))
+        self._barray_ty = LazyType(self._target, "QByteArray")
+        self._qcborval_ty = LazyType(self._target, "QCborValue")
 
     def num_children(self):
         return self._size
 
     def get_child_index(self, name: str):
-        if name == "[type]":
-            return self.TYPE_INDEX
         return _numeric_index(name)
 
-    def get_child_at_index(self, idx: int):
-        if idx == self.TYPE_INDEX:  # [type]
-            return _valobj_from_signed(self._valobj, self._typ)
-        if self._is_simple or idx < 0 or idx >= self._size or not self._elements:
+    def value_at_index(self, idx: int):
+        if idx < 0 or idx >= self._size:
             return
-        if self._typ == QCborValueType.ARRAY:
+
+        element_ptr = self._elements_ptr + (self._pointer_size * 2) * idx
+        err = SBError()
+        ty_and_flags = self._process.ReadUnsignedFromMemory(
+            element_ptr + self._pointer_size, 8, err
+        )
+        if err.Fail():
+            return
+        ty = ty_and_flags & 0xFFFFFFFF
+        flags = ty_and_flags >> 32
+        match ty:
+            case QCborValueType.Integer:
+                return self._valobj.CreateValueFromAddress(
+                    "", element_ptr, self._target.GetBasicType(lldb.eBasicTypeLongLong)
+                )
+            case QCborValueType.ByteArray | QCborValueType.String:
+                offset = self._process.ReadPointerFromMemory(element_ptr, err)
+                if err.Fail():
+                    return
+                size = self._process.ReadPointerFromMemory(self._data_ptr + offset, err)
+                if err.Fail():
+                    return
+                if flags & QtCborElementValueFlag.StringIsUtf16:
+                    ty = self._target.GetBasicType(lldb.eBasicTypeChar16).GetArrayType(
+                        size // 2
+                    )
+                else:
+                    ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(
+                        size
+                    )
+                addr = self._data_ptr + offset + self._pointer_size
+                if size == 0:
+                    # Use fixed data for an empty string.
+                    # Otherwise, LLDB will try to find a null-terminator.
+                    data = SBData()
+                    data.SetData(SBError(), b"\0\0", lldb.eByteOrderLittle, 8)
+                    v = self._valobj.CreateValueFromData("", data, ty)
+                else:
+                    v = self._valobj.CreateValueFromAddress("", addr, ty)
+                return v
+
+            case QCborValueType.Array:
+                return self._valobj.CreateValueFromAddress(
+                    "", element_ptr, self._array_ty()
+                )
+            case QCborValueType.Map:
+                return self._valobj.CreateValueFromAddress(
+                    "", element_ptr, self._map_ty()
+                )
+            case QCborValueType.Tag:
+                return _valobj_from_str(self._valobj, "Unsupported Tag")
+            case QCborValueType.CFalse:
+                return self._valobj.CreateBoolValue("", False)
+            case QCborValueType.CTrue:
+                return self._valobj.CreateBoolValue("", True)
+            case QCborValueType.Null:
+                data = SBData()
+                # Fixed buffer that contains a null value.
+                data.SetData(SBError(), QCBORVALUE_NULL, lldb.eByteOrderLittle, 8)
+                return self._valobj.CreateValueFromData("", data, self._qcborval_ty())
+            case QCborValueType.Undefined:
+                data = SBData()
+                # Fixed buffer that contains an undefined value.
+                data.SetData(SBError(), QCBORVALUE_UNDEFINED, lldb.eByteOrderLittle, 8)
+                return self._valobj.CreateValueFromData("", data, self._qcborval_ty())
+            case QCborValueType.Double:
+                return self._valobj.CreateValueFromAddress(
+                    "", element_ptr, self._target.GetBasicType(lldb.eBasicTypeDouble)
+                )
+            case QCborValueType.DateTime:
+                return _valobj_from_str(self._valobj, "Unsupported DateTime")
+            case QCborValueType.Url:
+                return _valobj_from_str(self._valobj, "Unsupported URL")
+            case QCborValueType.RegularExpression:
+                return _valobj_from_str(self._valobj, "Unsupported regex")
+            case QCborValueType.Uuid:
+                return _valobj_from_str(self._valobj, "Unsupported UUID")
+            case x:
+                return _valobj_from_str(self._valobj, f"Unknown cbor type {x:x}")
+
+        if self._typ == QCborValueType.Array:
             return self._map_el(idx)
 
-        assert self._typ == QCborValueType.MAP
+        assert self._typ == QCborValueType.Map
         key = self._get_string_at(idx * 2).summary
         return self._map_el(idx * 2 + 1).Clone(f"[{key}]")
 
-    def _map_el(self, idx: int):
-        assert self._elements
-        el = self._elements.GetChildAtIndex(idx)
-        eln = el.GetNonSyntheticValue()
-        ty = eln.GetChildMemberWithName("type").unsigned
-        if ty == QCborValueType.STRING:
-            return self._get_string_at(idx, eln).Clone(f"[{idx}]")
-        return el
-
-    def _get_type_container(self) -> tuple[int, SBValue]:
-        raise NotImplementedError()
-
     def update(self):
-        ty, container = self._get_type_container()
-        self._typ = ty
-        self._is_simple = QCborValueType.is_simple(self._typ)
-        if self._is_simple or container.load_addr == 0:
+        self._size = 0
+        # Always get the first child to make sure we cast the pointer.
+        # The pointer is wrapped in a struct, but we might not have debug info for that struct.
+        vo = self._valobj
+        if self._valobj.TypeIsPointerType():
+            vo = vo.Dereference()
+        st_ptr = vo.Cast(self._sizet_ptr).GetValueAsAddress()
+        if st_ptr == lldb.LLDB_INVALID_ADDRESS:
+            return False
+        st_ptr += self._pointer_size  # skip QSharedData
+
+        offsetof_qcborvalue_elements = (
+            self._pointer_size * 4
+        )  # usedData + sizeof(QByteArray)
+        # XXX: This changes in Qt7 - [ptr, size, d]; Qt6: [d, ptr, size]
+        offsetof_qarrdata_size = self._pointer_size * 2
+        offsetof_qarrdata_ptr = self._pointer_size
+
+        # Find the data pointer (pointer to the string data)
+        # `data` is at offset sizeof(qsizetype)
+        barray: SBValue = self._valobj.CreateValueFromAddress(
+            "", st_ptr + self._pointer_size, self._barray_ty()
+        ).GetNonSyntheticValue()
+        self._data_ptr = (
+            barray.GetChildMemberWithName("d")
+            .GetChildMemberWithName("ptr")
+            .GetValueAsAddress()
+        )
+
+        # Find the element count and the element data
+        error = SBError()
+        self._size = self._process.ReadPointerFromMemory(
+            st_ptr + offsetof_qcborvalue_elements + offsetof_qarrdata_size, error
+        )
+        if error.Fail():
             self._size = 0
-            self._data_ptr = 0
-            self._elements = None
-        else:
-            self._elements = container.GetChildMemberWithName(
-                "elements"
-            ).GetSyntheticValue()
-            assert self._elements
-            self._size = self._elements.GetNumChildren()
-            self._data_ptr = (
-                container.GetChildMemberWithName("data")
-                .GetChildMemberWithName("d")
-                .GetChildMemberWithName("ptr")
-                .unsigned
-            )
-            if self._typ == QCborValueType.MAP:
-                self._size = self._size // 2
+            return False
+
+        self._elements_ptr = self._process.ReadPointerFromMemory(
+            st_ptr + offsetof_qcborvalue_elements + offsetof_qarrdata_ptr, error
+        )
+        if error.Fail():
+            self._size = 0
+            return False
+
         return False
 
     def has_children(self):
         return True
 
-    def _get_string_at(self, n: int, el: None | SBValue = None):
-        assert self._elements
-        if not el:
-            el = self._elements.GetChildAtIndex(n).GetNonSyntheticValue()
-        assert el
-        return self._static_get_string_for(
-            self._valobj,
-            el,
-            self._data_ptr,
-            self._pointer_size,
-            self._target,
-            self._process,
+
+class QCborValueSyntheticProvider:
+    TYPE_INDEX = (1 << 32) - 1
+    VALUE_INDEX = (1 << 32) - 2
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target: SBTarget = valobj.GetTarget()
+        self._arr_ty = LazyType(self._target, ("QJsonArray", "QCborArray"))
+        self._map_ty = LazyType(self._target, ("QJsonObject", "QCborMap"))
+        self._forwarder: SBValue | None = None
+        self._synth_val: SBValue | None = None
+        self._ty = QCborValueType.Undefined
+
+    def num_children(self):
+        if self._forwarder is None or self._synth_val is not None:
+            return 0
+        return self._forwarder.GetNumChildren()
+
+    def get_child_index(self, name: str):
+        if name == "[type]":
+            return self.TYPE_INDEX
+        if name == "[value]":
+            return self.VALUE_INDEX
+        if self._forwarder is None:
+            return -1
+        return self._forwarder.GetIndexOfChildWithName(name)
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.TYPE_INDEX:
+            return _valobj_from_signed(self._valobj, self._ty)
+        if idx == self.VALUE_INDEX:
+            return self._synth_val
+        if self._forwarder is None or self._synth_val is not None:
+            return
+        return self._forwarder.GetChildAtIndex(idx)
+
+    def has_children(self):
+        return self._forwarder is not None and self._synth_val is None
+
+    def _make_forwarder_array(self) -> SBValue:
+        self._forwarder = (
+            self._valobj.GetChildMemberWithName("container")
+            .Cast(self._arr_ty())
+            .GetSyntheticValue()
         )
+        return self._forwarder  # type: ignore
 
-    @staticmethod
-    def _static_get_string_for(
-        root_val: SBValue,
-        el: SBValue,
-        data_ptr: int,
-        ptr_size: int | None = None,
-        target: SBTarget | None = None,
-        process: SBProcess | None = None,
-    ):
-        if not target:
-            target = root_val.GetTarget()
-            assert target
-        if not process:
-            process = root_val.GetProcess()
-            assert process
-        if not ptr_size:
-            ptr_size = target.GetAddressByteSize()
-        flags = el.GetChildMemberWithName("flags").GetSyntheticValue().unsigned
-        if flags == 0:
-            return _valobj_from_str(root_val, "", "")
-        value = el.GetChildAtIndex(0).GetChildAtIndex(0).unsigned
-        addr = data_ptr + value
-        len = process.ReadPointerFromMemory(addr, SBError())
-        if flags & QCborValueFlag.STRING_IS_UTF16:
-            ty = target.GetBasicType(lldb.eBasicTypeChar16).GetArrayType(len // 2)
-        else:
-            ty = target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(len)
-        return root_val.CreateValueFromAddress("", addr + ptr_size, ty)
+    def _make_forwarder_map(self) -> SBValue:
+        self._forwarder = (
+            self._valobj.GetChildMemberWithName("container")
+            .Cast(self._map_ty())
+            .GetSyntheticValue()
+        )
+        return self._forwarder  # type: ignore
+
+    def update(self):
+        self._forwarder = None
+        self._synth_val = None
+
+        self._ty = self._valobj.GetChildMemberWithName("t").GetValueAsUnsigned()
+        match self._ty:
+            case QCborValueType.Integer:
+                self._synth_val = self._valobj.GetChildMemberWithName("n")
+            case QCborValueType.ByteArray | QCborValueType.String:
+                arr = self._make_forwarder_array()
+                n = self._valobj.GetChildMemberWithName("n").GetValueAsUnsigned()
+                self._synth_val = arr.GetChildAtIndex(n)
+                if not self._synth_val:
+                    # If the index doesn't exist, it's an empty string.
+                    data = SBData()
+                    data.SetData(SBError(), b"\0", lldb.eByteOrderLittle, 8)
+                    ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(0)
+                    self._synth_val = self._valobj.CreateValueFromData("", data, ty)
+
+            case QCborValueType.Array:
+                self._make_forwarder_array()
+            case QCborValueType.Map:
+                self._make_forwarder_map()
+            case QCborValueType.CFalse:
+                self._synth_val = self._valobj.CreateBoolValue("", False)
+            case QCborValueType.CTrue:
+                self._synth_val = self._valobj.CreateBoolValue("", True)
+            case QCborValueType.Null | QCborValueType.Undefined:
+                pass
+            case QCborValueType.Double:
+                self._synth_val = self._valobj.GetChildMemberWithName("n").Cast(
+                    self._target.GetBasicType(lldb.eBasicTypeDouble)
+                )
+
+    def get_value(self):
+        return self._synth_val
 
 
-class QCborValueSyntheticProvider(_CborSyntheticProviderBase):
+class QCborMapSyntheticProvider(_CborContainerSyntheticProviderBase):
     def __init__(self, valobj: SBValue, internal_dict):
         super().__init__(valobj, internal_dict)
-        self._cbor_type = None
 
-    def _get_cbor_type(self):
-        if not self._cbor_type:
-            self._cbor_type = self._target.FindFirstType(
-                "QCborContainerPrivate"
-            ).GetPointerType()
-        return self._cbor_type
+    def num_children(self):
+        return super().num_children() // 2
 
-    def _get_type_container(self):
-        typ = self._valobj.GetChildMemberWithName("t").unsigned
-        container = self._valobj.GetChildMemberWithName("container")
-        if container.GetNumChildren() == 0:
-            container = container.Cast(self._get_cbor_type())
-
-        return typ, container
+    def get_child_at_index(self, idx: int):
+        key = self.value_at_index(idx * 2)
+        val = self.value_at_index(idx * 2 + 1)
+        if not key or not val:
+            return
+        summary = key.GetSummary()
+        if not summary:
+            summary = key.GetValue()
+        return val.Clone(f"[{summary}]")
 
 
-class QtCborElementSyntheticProvider(_CborSyntheticProviderBase):
-    def _get_type_container(self):
-        union = self._valobj.GetChildAtIndex(0)
-        typ = self._valobj.GetChildMemberWithName("type").unsigned
-        container = union.GetChildMemberWithName("container")
-        return typ, container
-
-
-class QJsonObjectSyntheticProvider(_CborSyntheticProviderBase):
+class QCborArraySyntheticProvider(_CborContainerSyntheticProviderBase):
     def __init__(self, valobj: SBValue, internal_dict):
         super().__init__(valobj, internal_dict)
-        self._priv_ptr = valobj.target.FindFirstType(
-            "QCborContainerPrivate"
-        ).GetPointerType()
 
-    def _get_type_container(self):
-        container = (
-            self._valobj.GetChildAtIndex(0)
-            .GetChildMemberWithName("d")
-            .GetChildAtIndex(0)
-            .Cast(self._priv_ptr)
-        )
-        return QCborValueType.MAP, container
-
-
-class QJsonArraySyntheticProvider(_CborSyntheticProviderBase):
-    def __init__(self, valobj: SBValue, internal_dict):
-        super().__init__(valobj, internal_dict)
-        self._priv_ptr = valobj.target.FindFirstType(
-            "QCborContainerPrivate"
-        ).GetPointerType()
-
-    def _get_type_container(self):
-        container = (
-            self._valobj.GetChildAtIndex(0)
-            .GetChildMemberWithName("d")
-            .GetChildAtIndex(0)
-            .Cast(self._priv_ptr)
-        )
-        return QCborValueType.ARRAY, container
+    def get_child_at_index(self, idx: int):
+        val = self.value_at_index(idx)
+        if not val:
+            return
+        return val.Clone(f"[{idx}]")
 
 
 class QJsonValueSyntheticProvider(_ExpandingSyntheticProvider):
+    def __init__(self, valobj: SBValue, internal_dict):
+        super().__init__(valobj, internal_dict)
+        self._sval = None
+
     def _get_value(self, valobj: SBValue) -> SBValue:
-        return valobj.GetChildAtIndex(0).GetSyntheticValue()
+        v = valobj.GetChildAtIndex(0).GetSyntheticValue()
+        self._sval = v.GetChildAtIndex(QCborValueSyntheticProvider.VALUE_INDEX)
+        return v
+
+    def get_value(self):
+        return self._sval
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:

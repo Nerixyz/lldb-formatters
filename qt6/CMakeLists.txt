@@ -23,3 +23,7 @@ target_link_libraries(qt6-app
         Qt6::Gui
         Qt6::Widgets
 )
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
