@@ -107,20 +107,22 @@ public:
             QJsonArray{
                 1,
                 false,
-                QJsonValue::Null,
+                QJsonValue::Undefined,
                 "foo",
                 QJsonObject{{"abc", false}},
             },
         },
     };
     QJsonArray qJsonArray{
-        1, false, QJsonValue::Null, "foo", QJsonObject{{"abc", false}},
+        1, false, QJsonValue::Undefined, "foo", QJsonObject{{"abc", false}},
     };
     QJsonValue qJsonValueUndef{QJsonValue::Undefined};
     QJsonValue qJsonValueNull{QJsonValue::Null};
+    QJsonValue qJsonValueStringEmpty{QJsonValue::String};
     QJsonValue qJsonValueInt{42};
     QJsonValue qJsonValueDouble{3.14};
     QJsonValue qJsonValueString{"foobar"};
+    QJsonValue qJsonValueEmptyString{""};
     QJsonValue qJsonValueL1String{QLatin1StringView("foobaz")};
     QJsonValue qJsonValueTrue{true};
     QJsonValue qJsonValueFalse{false};
@@ -136,7 +138,7 @@ public:
     QString qString = QString("Hello World!");
     QString qStringEmpty = QString("");
     QString qStringNull;
-    QStringView qStringView = QStringView(qString);
+    QStringView qStringView3 = QStringView(qString).sliced(0, 3);
     QStringView qStringViewEmpty;
 
     QTime qTime = QTime(4, 6, 12, 164);

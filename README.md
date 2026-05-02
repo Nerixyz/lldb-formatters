@@ -38,7 +38,7 @@ ctest
 
 > [!NOTE]
 >
-> Some formatters, most notably the ones for the `QJson*` types, require Qt to be compiled with debug info. On Windows, add the debug info files when installing and use `settings append target.debug-file-search-paths <path-to>/msvc2022_64/bin` to add the files to the search path.
+> Some formatters, most notably the ones for the `QDateTime` type, require Qt to be compiled with debug info. On Windows, add the debug info files when installing and use `settings append target.debug-file-search-paths <path-to>/msvc2022_64/bin` to add the files to the search path.
 
 ### Lua and Sol2
 

@@ -5,6 +5,8 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 
 ## Types
 
+🧪 indicates types with tests.
+
 - [ ] `QBasicAtomicInteger<*>`
 - [ ] `QBasicAtomicPointer<*>`
 - [ ] `QBasicAtomicPointer<void>`
@@ -25,10 +27,10 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [x] `QHash<*,*>`
 - [ ] `QHostAddress`
 - [ ] `QImage`
-- [x] `QJsonArray`
-- [x] `QJsonDocument`
-- [x] `QJsonObject`
-- [x] `QJsonValue`
+- [x] `QJsonArray` 🧪
+- [x] `QJsonDocument` 🧪
+- [x] `QJsonObject` 🧪
+- [x] `QJsonValue` 🧪
 - [ ] `QJsonValueConstRef`
 - [ ] `QJsonValueRef`
 - [ ] `QLine`
