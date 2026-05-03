@@ -877,9 +877,11 @@ class QHashPrivateMultiChainSyntheticProvider:
         self._size = 0
         vo = self._valobj
         max_idx = vo.target.GetMaximumNumberOfChildrenToDisplay()
-        while vo and vo.unsigned != 0 and self._size < max_idx:
+        while self._size < max_idx:
             vo = vo.GetChildAtIndex(self._next_idx)
             self._size += 1
+            if vo.GetValueAsAddress() == 0:
+                break
 
     def get_child_index(self, name: str):
         return _numeric_index(name)
@@ -890,8 +892,10 @@ class QHashPrivateMultiChainSyntheticProvider:
         cur = 0
         vo = self._valobj
         max_idx = vo.target.GetMaximumNumberOfChildrenToDisplay()
-        while cur != idx and vo and vo.unsigned != 0 and cur < max_idx:
+        while cur != idx and cur < max_idx:
             vo = vo.GetChildAtIndex(self._next_idx)
+            if vo.GetValueAsAddress() == 0:
+                break
             cur += 1
         if cur != idx:
             return None

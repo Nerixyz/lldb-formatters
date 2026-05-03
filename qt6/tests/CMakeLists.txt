@@ -13,15 +13,29 @@ create_python_tests(
         "${CMAKE_CURRENT_LIST_DIR}/../scripts/qt6.py"
     TESTS
         QByteArray
+        QHash
         QCheckedInt
         QChar
         QDate
         QDateTime
         QFlags
+        QList
+        QMap
+        QMultiHash
+        QPoint
+        QPointF
+        QRect
+        QRectF
+        QSet
+        QSize
+        QSizeF
         QJsonArray
         QJsonDocument
         QJsonObject
         QJsonValue
         QString
         QStringView
+        QTime
+        QUuid
+        QVarLengthArray
 )
