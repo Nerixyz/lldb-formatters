@@ -191,7 +191,7 @@ def _make_utf16_valobj(ptr: SBValue, size: int):
         size = min(size, limit_obj.GetUnsignedIntegerValue())
 
     process = ptr.GetProcess()
-    s: bytes = process.ReadMemory(ptr.GetValueAsAddress(), size, SBError())
+    s: bytes = process.ReadMemory(ptr.GetValueAsAddress(), size * 2, SBError())
     try:
         s = s.decode("utf-16le").encode("utf-8")
     except BaseException as _:
