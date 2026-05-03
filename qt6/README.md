@@ -10,11 +10,11 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [ ] `QBasicAtomicInteger<*>`
 - [ ] `QBasicAtomicPointer<*>`
 - [ ] `QBasicAtomicPointer<void>`
-- [x] `QByteArray`
-- [ ] `QCborArray`
-- [ ] `QCborContainerPrivate` (only the JSON subset)
-- [ ] `QCborMap`
-- [ ] `QCborValue` (only the JSON subset)
+- [x] `QByteArray` 🧪
+- [ ] `QCborArray` 🟡 (only the JSON subset)
+- [ ] `QCborContainerPrivate` 🟡 (only the JSON subset)
+- [ ] `QCborMap` 🟡 (only the JSON subset)
+- [ ] `QCborValue` 🟡 (only the JSON subset)
 - [x] `QCheckedInt<*>`
 - [x] `QChar`
 - [x] `QDate`
@@ -66,9 +66,9 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [ ] `QSizePolicy`
 - [ ] `QSpan<*>`
 - [ ] `QSpecialInteger<*>`
-- [x] `QString`
+- [x] `QString` 🧪
 - [ ] `QStringRef`
-- [x] `QStringView`
+- [x] `QStringView` 🧪
 - [x] `QTime`
 - [ ] `QUrl`
 - [x] `QUuid`

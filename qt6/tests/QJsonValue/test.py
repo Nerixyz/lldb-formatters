@@ -31,7 +31,7 @@ class TestQJsonObject(testlib.TestCase):
         self.assertVarPath(
             # FIXME: LLDB before 23 doesn't use the array bounds for strings
             "vStrUtf16",
-            ValueCheck(summary=re.compile('^u"str🚧'), children=[]),
+            ValueCheck(summary=re.compile(r'^u?"str🚧"$'), children=[]),
         )
         self.assertVarPath("vStrEmpty", ValueCheck(summary='""', children=[]))
         self.assertVarPath(

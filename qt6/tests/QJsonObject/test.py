@@ -70,9 +70,13 @@ class TestQJsonObject(testlib.TestCase):
                     ),
                     ValueCheck(name='["stringAscii"]', summary='"stringAscii"'),
                     # FIXME: LLDB before 23 doesn't use the array bounds for strings
-                    ValueCheck(name=re.compile('^[u"stringKeyUtf16🐛'), summary='""'),
+                    ValueCheck(
+                        name=re.compile(r'^\[u?"stringKeyUtf16🐛"]$'), summary='""'
+                    ),
                     # FIXME: LLDB before 23 doesn't use the array bounds for strings
-                    ValueCheck(name='["stringUtf16"]', summary=re.compile('u"utf16💔')),
+                    ValueCheck(
+                        name='["stringUtf16"]', summary=re.compile(r'u?"utf16💔"$')
+                    ),
                     ValueCheck(name='["true"]', value="true", summary=""),
                 ],
             ),

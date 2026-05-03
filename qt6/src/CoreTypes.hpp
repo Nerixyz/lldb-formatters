@@ -57,7 +57,7 @@ public:
     QJsonDocument qJsonDocumentArray{QJsonArray{
         QStringLiteral("😃😃😃"),
         "foo",
-        QLatin1String("foo"),
+        QLatin1String(""),
         "empty object->",
         QJsonObject{},
         "empty array ->",
