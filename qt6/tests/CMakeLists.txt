@@ -16,6 +16,7 @@ create_python_tests(
         QCheckedInt
         QChar
         QDate
+        QDateTime
         QJsonArray
         QJsonDocument
         QJsonObject

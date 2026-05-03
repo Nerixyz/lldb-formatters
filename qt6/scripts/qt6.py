@@ -277,7 +277,9 @@ def QDateTimeSummaryProvider(
         tz = datetime.UTC
     else:
         tz = datetime.timezone(datetime.timedelta(seconds=offset_obj.signed))
-    dt = datetime.datetime.fromtimestamp(ms / 1000.0, tz)
+    dt = datetime.datetime.fromtimestamp(0, tz) + datetime.timedelta(
+        seconds=ms / 1000.0
+    )
     ms = dt.microsecond // 1000
     ms_part = f".{ms:03}" if ms != 0 else ""
     if is_local:
@@ -1310,9 +1312,12 @@ def _numeric_index(name: str) -> int | None:
 
 
 def _qdatetime_data(valobj: SBValue) -> tuple[datetime.datetime, bool] | None:
-    d: SBValue = valobj.GetChildMemberWithName("d")
-    d_ptr: SBValue = d.GetChildMemberWithName("d")
-    d_val = d_ptr.GetValueAsAddress()
+    tgt: SBTarget = valobj.GetTarget()
+    ptr_size: int = tgt.GetAddressByteSize()
+    void_ptr = tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+    if valobj.TypeIsPointerType():
+        valobj = valobj.Dereference()
+    d_val: int = valobj.Cast(void_ptr).GetValueAsAddress()
     is_short = (d_val & 1) != 0
     if is_short:
         status = d_val & 0xFF
@@ -1326,19 +1331,51 @@ def _qdatetime_data(valobj: SBValue) -> tuple[datetime.datetime, bool] | None:
         dt = datetime.datetime.fromtimestamp(msec / 1000.0, datetime.UTC)
         return dt, is_local
 
-    dt_priv = valobj.target.FindFirstType("QDateTimePrivate").GetPointerType()
-    if not dt_priv:
-        return
-    d_ptr = d_ptr.Cast(dt_priv)
-    status = (
-        d_ptr.GetChildMemberWithName("m_status").GetChildMemberWithName("i").unsigned
-    )
+    process: SBProcess = valobj.GetProcess()
+    # class QDateTimePrivate : public QSharedData {
+    #   Status m_status;
+    #   qint64 m_msecs;
+    #   int m_offsetFromUtc;
+    #   QTimeZone m_timeZone;
+    # };
+    status_addr = d_val + 4
+    msecs_addr = d_val + ptr_size
+    offset_from_utc_addr = d_val + 16
+
+    err = SBError()
+    status = process.ReadUnsignedFromMemory(status_addr, 4, err)
+    if err.Fail():
+        return None
+
     if (status & QDateTimeConstants.STATUS_VALID_DATETIME_MASK) == 0:
         return None
-    msec = d_ptr.GetChildMemberWithName("m_msecs").signed
-    offset = d_ptr.GetChildMemberWithName("m_offsetFromUtc").signed
+
+    msec = process.ReadUnsignedFromMemory(msecs_addr, 8, err)
+    msec = _uint64_to_int64(msec)
+    if err.Fail():
+        return None
+
+    offset = process.ReadUnsignedFromMemory(offset_from_utc_addr, 4, err)
+    offset = _uint32_to_int32(offset)
+    if err.Fail():
+        return None
+
     # datetime expects a UTC timestamp
-    dt = datetime.datetime.fromtimestamp(
-        msec / 1000.0 - offset, datetime.timezone(datetime.timedelta(seconds=offset))
-    )
-    return dt, False
+    try:
+        dt = datetime.datetime.fromtimestamp(
+            0,
+            datetime.timezone(datetime.timedelta(seconds=offset)),
+        ) + datetime.timedelta(seconds=msec / 1000.0 - offset)
+        return dt, False
+    except BaseException as e:
+        print(e)
+
+
+def _uint32_to_int32(n):
+    n = n & 0xFFFF_FFFF
+    return (n ^ 0x8000_0000) - 0x8000_0000
+
+
+def _uint64_to_int64(n):
+    n = n & 0xFFFF_FFFF_FFFF_FFFF
+    return (n ^ 0x8000_0000_0000_0000) - 0x8000_0000_0000_0000

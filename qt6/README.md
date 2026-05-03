@@ -18,7 +18,7 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [x] `QCheckedInt<*>` 🧪
 - [x] `QChar` 🧪
 - [x] `QDate` 🧪
-- [x] `QDateTime`
+- [x] `QDateTime` 🧪
 - [ ] `QDir`
 - [ ] `QFile`
 - [ ] `QFileInfo`
