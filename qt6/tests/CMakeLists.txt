@@ -17,6 +17,7 @@ create_python_tests(
         QChar
         QDate
         QDateTime
+        QFlags
         QJsonArray
         QJsonDocument
         QJsonObject

@@ -22,7 +22,7 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [ ] `QDir`
 - [ ] `QFile`
 - [ ] `QFileInfo`
-- [x] `QFlags<*>`
+- [x] `QFlags<*>` 🧪
 - [ ] `QGenericMatrix<*,*,*>`
 - [x] `QHash<*,*>`
 - [ ] `QHostAddress`
