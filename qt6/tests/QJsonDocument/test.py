@@ -58,7 +58,7 @@ class TestQJsonObject(testlib.TestCase):
                 summary="[ size=9 ]",
                 children=[
                     # FIXME: LLDB before 23 doesn't use the array bounds for strings
-                    ValueCheck(name="[0]", summary=re.compile('^u"😃😃😃')),
+                    ValueCheck(name="[0]", summary=re.compile('^u?"😃😃😃"$')),
                     ValueCheck(name="[1]", summary='"foo"'),
                     ValueCheck(name="[2]", summary='"foo"'),
                     ValueCheck(name="[3]", summary='"empty object->"'),
@@ -98,7 +98,7 @@ class TestQJsonObject(testlib.TestCase):
                     ),
                     ValueCheck(name='["foo"]', summary='"bar"'),
                     # FIXME: LLDB before 23 doesn't use the array bounds for strings
-                    ValueCheck(name=re.compile('^[u"😃😃😃'), summary='"foo"'),
+                    ValueCheck(name=re.compile(r'^\[u?"😃😃😃"\]$'), summary='"foo"'),
                 ],
             ),
         )

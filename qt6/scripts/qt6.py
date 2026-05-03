@@ -7,7 +7,6 @@ from lldb import (
     SBError,
     SBDebugger,
     SBProcess,
-    SBTypeList,
 )
 from typing import Callable
 from qt_constants import (
@@ -19,11 +18,19 @@ from qt_constants import (
     QCBORVALUE_UNDEFINED,
 )
 import datetime
-import weakref
+import re
+
+MIN_LLDB_VERSION = (20, 0, 0)
+
+UNICODE_STR_ARRAY_IS_LIMITED = False
+"""charN_t[N] limits the extraction to N characters."""
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
     dbg.HandleCommand("type category define -e qt -l c++")
+
+    global UNICODE_STR_ARRAY_IS_LIMITED
+    UNICODE_STR_ARRAY_IS_LIMITED = _get_lldb_version(dbg) >= (23, 0, 0)
 
     def add_summary(
         type_name: str,
@@ -135,6 +142,15 @@ def _add_summary_string(
     dbg.HandleCommand(cmd)
 
 
+def _get_lldb_version(dbg: SBDebugger) -> tuple[int, int, int]:
+    s = dbg.GetVersionString()
+    print(s)
+    m = re.search(r"\bversion (\d+)\.(\d+)\.(\d+)", s)
+    if not m:
+        return (20, 0, 0)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+
+
 def QStringSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> str | None:
@@ -150,15 +166,40 @@ def QByteArraySummaryProvider(
 def _qarraydata_summary(valobj: SBValue, ty, prefix: str):
     d_obj: SBValue = valobj.GetNonSyntheticValue().GetChildMemberWithName("d")
     ptr_obj: SBValue = d_obj.GetChildMemberWithName("ptr")
-    size = d_obj.GetChildMemberWithName("size").unsigned
+    size = d_obj.GetChildMemberWithName("size").GetValueAsUnsigned()
     if not ptr_obj.IsValid():
         return None
     if ptr_obj.GetValueAsUnsigned() == 0:
         return prefix + '"" (null)'
     if size == 0:
         return prefix + '""'
+
+    if ty == lldb.eBasicTypeChar16:
+        return _make_utf16_valobj(ptr_obj, size).GetSummary()
     array_type = valobj.target.GetBasicType(ty).GetArrayType(size)
-    return ptr_obj.deref.Cast(array_type).summary
+    return ptr_obj.deref.Cast(array_type).GetSummary()
+
+
+def _make_utf16_valobj(ptr: SBValue, size: int):
+    tgt = ptr.GetTarget()
+    if UNICODE_STR_ARRAY_IS_LIMITED:
+        ty = tgt.GetBasicType(lldb.eBasicTypeChar16).GetArrayType(size)
+        return ptr.Dereference().Cast(ty)
+
+    limit_obj = tgt.GetDebugger().GetSetting("target.max-string-summary-length")
+    if limit_obj:
+        size = min(size, limit_obj.GetUnsignedIntegerValue())
+
+    process = ptr.GetProcess()
+    s: bytes = process.ReadMemory(ptr.GetValueAsAddress(), size * 2, SBError())
+    try:
+        s = s.decode("utf-16le").encode("utf-8")
+    except BaseException as _:
+        pass
+    data = SBData()
+    data.SetData(SBError(), s, lldb.eByteOrderLittle, 8)
+    ty = tgt.GetBasicType(lldb.eBasicTypeChar).GetArrayType(len(s))
+    return ptr.CreateValueFromData("", data, ty)
 
 
 def QStringViewSummaryProvider(
@@ -166,11 +207,10 @@ def QStringViewSummaryProvider(
 ) -> str | None:
     valobj = valobj.GetNonSyntheticValue()
     ptr: SBValue = valobj.GetChildMemberWithName("m_data")
-    size = valobj.GetChildMemberWithName("m_size").unsigned
+    size = valobj.GetChildMemberWithName("m_size").GetValueAsUnsigned()
     if size == 0:
         return 'u""'
-    array_type = valobj.target.GetBasicType(lldb.eBasicTypeChar16).GetArrayType(size)
-    return ptr.deref.Cast(array_type).summary
+    return _make_utf16_valobj(ptr, size).GetSummary()
 
 
 def QUuidSummaryProvider(
@@ -984,7 +1024,23 @@ class _CborContainerSyntheticProviderBase:
                     data.SetData(SBError(), b"\0\0", lldb.eByteOrderLittle, 8)
                     v = self._valobj.CreateValueFromData("", data, ty)
                 else:
-                    v = self._valobj.CreateValueFromAddress("", addr, ty)
+                    if (
+                        flags & QtCborElementValueFlag.StringIsUtf16
+                        and not UNICODE_STR_ARRAY_IS_LIMITED
+                    ):
+                        s: bytes = self._process.ReadMemory(addr, size, SBError())
+                        try:
+                            s = s.decode("utf-16le").encode("utf-8")
+                        except BaseException as _:
+                            pass
+                        data = SBData()
+                        data.SetData(SBError(), s, lldb.eByteOrderLittle, 8)
+                        ty = self._target.GetBasicType(
+                            lldb.eBasicTypeChar
+                        ).GetArrayType(len(s))
+                        v = self._valobj.CreateValueFromData("", data, ty)
+                    else:
+                        v = self._valobj.CreateValueFromAddress("", addr, ty)
                 return v
 
             case QCborValueType.Array:

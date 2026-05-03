@@ -35,8 +35,7 @@ class TestQJsonObject(testlib.TestCase):
                     ValueCheck(name="[3]", value="1234567890", summary=""),
                     ValueCheck(name="[4]", summary="null"),
                     ValueCheck(name="[5]", summary='"stringAscii"'),
-                    # FIXME: LLDB before 23 doesn't use the array bounds for strings
-                    ValueCheck(name="[6]", summary=re.compile('^u"utf16💔')),
+                    ValueCheck(name="[6]", summary=re.compile(r'^u?"utf16💔"$')),
                     ValueCheck(name="[7]", summary='""'),
                     ValueCheck(
                         name="[8]",

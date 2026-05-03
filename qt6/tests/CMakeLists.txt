@@ -12,8 +12,11 @@ create_python_tests(
     SCRIPTS
         "${CMAKE_CURRENT_LIST_DIR}/../scripts/qt6.py"
     TESTS
+        QByteArray
         QJsonArray
         QJsonDocument
         QJsonObject
         QJsonValue
+        QString
+        QStringView
 )
