@@ -144,7 +144,6 @@ def _add_summary_string(
 
 def _get_lldb_version(dbg: SBDebugger) -> tuple[int, int, int]:
     s = dbg.GetVersionString()
-    print(s)
     m = re.search(r"\bversion (\d+)\.(\d+)\.(\d+)", s)
     if not m:
         return (20, 0, 0)
@@ -259,7 +258,7 @@ def QDateSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> str | None:
     valobj = valobj.GetNonSyntheticValue()
-    date = _QDate(valobj.GetChildMemberWithName("jd").signed)
+    date = _QDate(valobj.GetChildMemberWithName("jd").GetValueAsSigned())
     if not date.valid:
         return "(invalid)"
     return f"{date.year}-{date.month:02}-{date.day:02}"
@@ -645,19 +644,25 @@ class _QDate:
         )
         if not self.valid:
             return
-        l = jd + 68569
-        n = 4 * l // 146097
-        l = l - (146097 * n + 3) // 4
-        i = 4000 * (l + 1) // 1461001
-        l = l - 1461 * i // 4 + 31
-        j = 80 * l // 2447
-        k = l - 2447 * j // 80
-        l = j // 11
-        j = j + 2 - 12 * l
-        i = 100 * (n - 49) + i + l
-        self.year = i
-        self.month = j
-        self.day = k
+
+        # QGregorianCalendar::partsFromJulian:
+        # https://github.com/qt/qtbase/blob/3814e28f00b4d551b4691f40431c0d324e88e55d/src/corelib/time/qgregoriancalendar.cpp#L247-L266
+
+        dayNumber = jd - QDateTimeConstants.BASE_JD
+        century = (4 * dayNumber - 1) // QDateTimeConstants.FOUR_CENTURIES
+        dayInCentury = dayNumber - (QDateTimeConstants.FOUR_CENTURIES * century) // 4
+
+        yearInCentury = (4 * dayInCentury - 1) // QDateTimeConstants.FOUR_YEARS
+        dayInYear = dayInCentury - (QDateTimeConstants.FOUR_YEARS * yearInCentury) // 4
+        m = (5 * dayInYear - 3) // QDateTimeConstants.FIVE_MONTHS
+        # That m is a month adjusted to March = 0, with Jan = 10, Feb = 11 in the previous year.
+        yearOffset = 0 if m < 10 else 1
+
+        self.year = 100 * century + yearInCentury + yearOffset
+        if self.year <= 0:
+            self.year -= 1
+        self.month = m + 3 - 12 * yearOffset
+        self.day = dayInYear - (QDateTimeConstants.FIVE_MONTHS * m + 2) // 5
 
 
 class QTimeSyntheticProvider(_DispatchedSynthetic):

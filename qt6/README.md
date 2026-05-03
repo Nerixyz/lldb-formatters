@@ -17,7 +17,7 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [ ] `QCborValue` 🟡 (only the JSON subset)
 - [x] `QCheckedInt<*>` 🧪
 - [x] `QChar` 🧪
-- [x] `QDate`
+- [x] `QDate` 🧪
 - [x] `QDateTime`
 - [ ] `QDir`
 - [ ] `QFile`
