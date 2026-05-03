@@ -1,0 +1,15 @@
+#include <QHash>
+
+int main()
+{
+    QHash<int, int> empty;
+    QHash<int, int> one;
+    one.insert(1, 2);
+
+    QHash<int, int> many{
+        {1, 2},  {2, 4},  {3, 6},  {4, 8},  {5, 10},
+        {6, 12}, {7, 14}, {8, 16}, {9, 18}, {10, 20},
+    };
+
+    return 0;  // break here
+}

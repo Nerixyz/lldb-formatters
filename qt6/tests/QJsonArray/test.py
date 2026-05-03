@@ -3,7 +3,7 @@ from testlib import ValueCheck
 import re
 
 
-class TestQJsonObject(testlib.TestCase):
+class TestQJsonArray(testlib.TestCase):
     def runTest(self):
         self.runToRegex("// break here")
         self.assertVarPath("empty", ValueCheck(summary="[ size=0 ]", children=[]))

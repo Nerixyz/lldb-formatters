@@ -5,12 +5,12 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 
 ## Types
 
-🧪 indicates types with tests.
+All types are tested (see [`tests/`](./tests/)).
 
 - [ ] `QBasicAtomicInteger<*>`
 - [ ] `QBasicAtomicPointer<*>`
 - [ ] `QBasicAtomicPointer<void>`
-- [x] `QByteArray` 🧪
+- [x] `QByteArray`
 - [ ] `QCborArray` 🟡 (only the JSON subset)
 - [ ] `QCborContainerPrivate` 🟡 (only the JSON subset)
 - [ ] `QCborMap` 🟡 (only the JSON subset)
@@ -27,10 +27,10 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [x] `QHash<*,*>`
 - [ ] `QHostAddress`
 - [ ] `QImage`
-- [x] `QJsonArray` 🧪
-- [x] `QJsonDocument` 🧪
-- [x] `QJsonObject` 🧪
-- [x] `QJsonValue` 🧪
+- [x] `QJsonArray`
+- [x] `QJsonDocument`
+- [x] `QJsonObject`
+- [x] `QJsonValue`
 - [ ] `QJsonValueConstRef`
 - [ ] `QJsonValueRef`
 - [ ] `QLine`
@@ -47,7 +47,7 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [ ] `QMatrix4x3`
 - [ ] `QMatrix4x4`
 - [x] `QMultiHash<*,*>`
-- [x] `QMultiMap<*,*>`
+- [ ] `QMultiMap<*,*>`
 - [ ] `QObject`
 - [ ] `QPair<*,*>`
 - [ ] `QPixmap`
@@ -66,9 +66,9 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [ ] `QSizePolicy`
 - [ ] `QSpan<*>`
 - [ ] `QSpecialInteger<*>`
-- [x] `QString` 🧪
+- [x] `QString`
 - [ ] `QStringRef`
-- [x] `QStringView` 🧪
+- [x] `QStringView`
 - [x] `QTime`
 - [ ] `QUrl`
 - [x] `QUuid`

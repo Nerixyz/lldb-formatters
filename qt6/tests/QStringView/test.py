@@ -3,7 +3,7 @@ from testlib import ValueCheck
 import re
 
 
-class TestQJsonObject(testlib.TestCase):
+class TestQStringView(testlib.TestCase):
     def runTest(self):
         self.runToRegex("// break here")
         self.assertVarPath("defaultC", ValueCheck(summary='u""', children=[]))

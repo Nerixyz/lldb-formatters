@@ -13,6 +13,14 @@ class QDateTimeConstants:
     JULIAN_DAY_MAX = 784354017364
     JULIAN_DAY_MIN = -784350574879
 
+    # https://github.com/qt/qtbase/blob/3814e28f00b4d551b4691f40431c0d324e88e55d/src/corelib/time/qcalendarmath_p.h#L114-L115
+    FOUR_YEARS = 4 * 365 + 1
+    FIVE_MONTHS = 31 + 30 + 31 + 30 + 31  # Mar-Jul or Aug-Dec.
+    FOUR_CENTURIES = 400 * 365 + 97
+    # Julian Day number of Gregorian 1 BCE, February 29th:
+    LEAP_DAY_GREGORIAN_1BCE = 1721119
+    BASE_JD = LEAP_DAY_GREGORIAN_1BCE
+
     STATUS_TIME_SPEC_MASK = 0x30
     STATUS_TIME_SPEC_SHIFT = 4
     """corelib/time/qdatetime_p.h (QDateTimePrivate::StatusFlag::TimeSpecMask)"""

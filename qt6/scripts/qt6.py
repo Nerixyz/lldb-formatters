@@ -144,7 +144,6 @@ def _add_summary_string(
 
 def _get_lldb_version(dbg: SBDebugger) -> tuple[int, int, int]:
     s = dbg.GetVersionString()
-    print(s)
     m = re.search(r"\bversion (\d+)\.(\d+)\.(\d+)", s)
     if not m:
         return (20, 0, 0)
@@ -259,7 +258,7 @@ def QDateSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> str | None:
     valobj = valobj.GetNonSyntheticValue()
-    date = _QDate(valobj.GetChildMemberWithName("jd").signed)
+    date = _QDate(valobj.GetChildMemberWithName("jd").GetValueAsSigned())
     if not date.valid:
         return "(invalid)"
     return f"{date.year}-{date.month:02}-{date.day:02}"
@@ -278,7 +277,9 @@ def QDateTimeSummaryProvider(
         tz = datetime.UTC
     else:
         tz = datetime.timezone(datetime.timedelta(seconds=offset_obj.signed))
-    dt = datetime.datetime.fromtimestamp(ms / 1000.0, tz)
+    dt = datetime.datetime.fromtimestamp(0, tz) + datetime.timedelta(
+        seconds=ms / 1000.0
+    )
     ms = dt.microsecond // 1000
     ms_part = f".{ms:03}" if ms != 0 else ""
     if is_local:
@@ -645,19 +646,25 @@ class _QDate:
         )
         if not self.valid:
             return
-        l = jd + 68569
-        n = 4 * l // 146097
-        l = l - (146097 * n + 3) // 4
-        i = 4000 * (l + 1) // 1461001
-        l = l - 1461 * i // 4 + 31
-        j = 80 * l // 2447
-        k = l - 2447 * j // 80
-        l = j // 11
-        j = j + 2 - 12 * l
-        i = 100 * (n - 49) + i + l
-        self.year = i
-        self.month = j
-        self.day = k
+
+        # QGregorianCalendar::partsFromJulian:
+        # https://github.com/qt/qtbase/blob/3814e28f00b4d551b4691f40431c0d324e88e55d/src/corelib/time/qgregoriancalendar.cpp#L247-L266
+
+        dayNumber = jd - QDateTimeConstants.BASE_JD
+        century = (4 * dayNumber - 1) // QDateTimeConstants.FOUR_CENTURIES
+        dayInCentury = dayNumber - (QDateTimeConstants.FOUR_CENTURIES * century) // 4
+
+        yearInCentury = (4 * dayInCentury - 1) // QDateTimeConstants.FOUR_YEARS
+        dayInYear = dayInCentury - (QDateTimeConstants.FOUR_YEARS * yearInCentury) // 4
+        m = (5 * dayInYear - 3) // QDateTimeConstants.FIVE_MONTHS
+        # That m is a month adjusted to March = 0, with Jan = 10, Feb = 11 in the previous year.
+        yearOffset = 0 if m < 10 else 1
+
+        self.year = 100 * century + yearInCentury + yearOffset
+        if self.year <= 0:
+            self.year -= 1
+        self.month = m + 3 - 12 * yearOffset
+        self.day = dayInYear - (QDateTimeConstants.FIVE_MONTHS * m + 2) // 5
 
 
 class QTimeSyntheticProvider(_DispatchedSynthetic):
@@ -870,9 +877,11 @@ class QHashPrivateMultiChainSyntheticProvider:
         self._size = 0
         vo = self._valobj
         max_idx = vo.target.GetMaximumNumberOfChildrenToDisplay()
-        while vo and vo.unsigned != 0 and self._size < max_idx:
+        while self._size < max_idx:
             vo = vo.GetChildAtIndex(self._next_idx)
             self._size += 1
+            if vo.GetValueAsAddress() == 0:
+                break
 
     def get_child_index(self, name: str):
         return _numeric_index(name)
@@ -883,8 +892,10 @@ class QHashPrivateMultiChainSyntheticProvider:
         cur = 0
         vo = self._valobj
         max_idx = vo.target.GetMaximumNumberOfChildrenToDisplay()
-        while cur != idx and vo and vo.unsigned != 0 and cur < max_idx:
+        while cur != idx and cur < max_idx:
             vo = vo.GetChildAtIndex(self._next_idx)
+            if vo.GetValueAsAddress() == 0:
+                break
             cur += 1
         if cur != idx:
             return None
@@ -1305,9 +1316,12 @@ def _numeric_index(name: str) -> int | None:
 
 
 def _qdatetime_data(valobj: SBValue) -> tuple[datetime.datetime, bool] | None:
-    d: SBValue = valobj.GetChildMemberWithName("d")
-    d_ptr: SBValue = d.GetChildMemberWithName("d")
-    d_val = d_ptr.GetValueAsAddress()
+    tgt: SBTarget = valobj.GetTarget()
+    ptr_size: int = tgt.GetAddressByteSize()
+    void_ptr = tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+    if valobj.TypeIsPointerType():
+        valobj = valobj.Dereference()
+    d_val: int = valobj.Cast(void_ptr).GetValueAsAddress()
     is_short = (d_val & 1) != 0
     if is_short:
         status = d_val & 0xFF
@@ -1321,19 +1335,51 @@ def _qdatetime_data(valobj: SBValue) -> tuple[datetime.datetime, bool] | None:
         dt = datetime.datetime.fromtimestamp(msec / 1000.0, datetime.UTC)
         return dt, is_local
 
-    dt_priv = valobj.target.FindFirstType("QDateTimePrivate").GetPointerType()
-    if not dt_priv:
-        return
-    d_ptr = d_ptr.Cast(dt_priv)
-    status = (
-        d_ptr.GetChildMemberWithName("m_status").GetChildMemberWithName("i").unsigned
-    )
+    process: SBProcess = valobj.GetProcess()
+    # class QDateTimePrivate : public QSharedData {
+    #   Status m_status;
+    #   qint64 m_msecs;
+    #   int m_offsetFromUtc;
+    #   QTimeZone m_timeZone;
+    # };
+    status_addr = d_val + 4
+    msecs_addr = d_val + ptr_size
+    offset_from_utc_addr = d_val + 16
+
+    err = SBError()
+    status = process.ReadUnsignedFromMemory(status_addr, 4, err)
+    if err.Fail():
+        return None
+
     if (status & QDateTimeConstants.STATUS_VALID_DATETIME_MASK) == 0:
         return None
-    msec = d_ptr.GetChildMemberWithName("m_msecs").signed
-    offset = d_ptr.GetChildMemberWithName("m_offsetFromUtc").signed
+
+    msec = process.ReadUnsignedFromMemory(msecs_addr, 8, err)
+    msec = _uint64_to_int64(msec)
+    if err.Fail():
+        return None
+
+    offset = process.ReadUnsignedFromMemory(offset_from_utc_addr, 4, err)
+    offset = _uint32_to_int32(offset)
+    if err.Fail():
+        return None
+
     # datetime expects a UTC timestamp
-    dt = datetime.datetime.fromtimestamp(
-        msec / 1000.0 - offset, datetime.timezone(datetime.timedelta(seconds=offset))
-    )
-    return dt, False
+    try:
+        dt = datetime.datetime.fromtimestamp(
+            0,
+            datetime.timezone(datetime.timedelta(seconds=offset)),
+        ) + datetime.timedelta(seconds=msec / 1000.0 - offset)
+        return dt, False
+    except BaseException as e:
+        print(e)
+
+
+def _uint32_to_int32(n):
+    n = n & 0xFFFF_FFFF
+    return (n ^ 0x8000_0000) - 0x8000_0000
+
+
+def _uint64_to_int64(n):
+    n = n & 0xFFFF_FFFF_FFFF_FFFF
+    return (n ^ 0x8000_0000_0000_0000) - 0x8000_0000_0000_0000

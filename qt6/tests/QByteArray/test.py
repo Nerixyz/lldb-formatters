@@ -2,7 +2,7 @@ import testlib
 from testlib import ValueCheck
 
 
-class TestQJsonObject(testlib.TestCase):
+class TestQByteArray(testlib.TestCase):
     def runTest(self):
         self.runToRegex("// break here")
         self.assertVarPath("null", ValueCheck(summary='"" (null)', children=[]))
