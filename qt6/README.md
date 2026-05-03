@@ -15,7 +15,7 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 - [ ] `QCborContainerPrivate` 🟡 (only the JSON subset)
 - [ ] `QCborMap` 🟡 (only the JSON subset)
 - [ ] `QCborValue` 🟡 (only the JSON subset)
-- [x] `QCheckedInt<*>`
+- [x] `QCheckedInt<*>` 🧪
 - [x] `QChar`
 - [x] `QDate`
 - [x] `QDateTime`
