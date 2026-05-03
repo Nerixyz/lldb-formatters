@@ -14,6 +14,7 @@ create_python_tests(
     TESTS
         QByteArray
         QCheckedInt
+        QChar
         QJsonArray
         QJsonDocument
         QJsonObject
