@@ -20,6 +20,7 @@ create_python_tests(
         QDate
         QDateTime
         QDir
+        QFile
         QFlags
         QHash
         QJsonArray
