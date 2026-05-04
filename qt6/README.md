@@ -23,7 +23,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QDateTime`
 - [x] `QDir` (🧪)
 - [x] `QFile` (🧪)
-- [ ] `QFileInfo`
+- [x] `QFileInfo` (🧪)
 - [x] `QFlags<*>`
 - [ ] `QGenericMatrix<*,*,*>`
 - [x] `QHash<*,*>`

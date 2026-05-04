@@ -21,6 +21,7 @@ create_python_tests(
         QDateTime
         QDir
         QFile
+        QFileInfo
         QFlags
         QHash
         QJsonArray
