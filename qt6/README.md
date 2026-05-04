@@ -7,6 +7,8 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 
 All types are tested (see [`tests/`](./tests/)).
 
+Types marked with 🧪 have improved formatting if debug info for private types is available.
+
 - [x] `QBasicAtomicInteger<*>`
 - [x] `QBasicAtomicPointer<*>`
 - [x] `QBasicAtomicPointer<void>`
@@ -19,7 +21,7 @@ All types are tested (see [`tests/`](./tests/)).
 - [x] `QChar`
 - [x] `QDate`
 - [x] `QDateTime`
-- [ ] `QDir`
+- [x] `QDir` (🧪)
 - [ ] `QFile`
 - [ ] `QFileInfo`
 - [x] `QFlags<*>`

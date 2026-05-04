@@ -19,6 +19,7 @@ create_python_tests(
         QCheckedInt
         QDate
         QDateTime
+        QDir
         QFlags
         QHash
         QJsonArray

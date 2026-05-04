@@ -71,6 +71,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QJsonDocument")
     add_summary("QJsonValue")
     add_summary("QVariant")
+    add_summary("QDir")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Multi)?Hash<.*>$", "size=${svar%#}", regex=True)
@@ -128,6 +129,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QJsonValue")
     add_synthetic("QCborValue")
     add_synthetic("QVariant")
+    add_synthetic("QDir")
 
 
 def _add_summary_string(
@@ -1592,6 +1594,66 @@ class QVariantSyntheticProvider:
         if is_pointer:
             ty = ty.GetPointerType()
         return ty
+
+
+def QDirSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    vo = valobj.GetChildAtIndex(QDirSyntheticProvider.NAME_INDEX)
+    if not vo:
+        return ""
+    return vo.GetSummary() or ""
+
+
+class QDirSyntheticProvider:
+    NAME_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target: SBTarget = valobj.GetTarget()
+        self._d_ptr: SBValue | None = None
+        self._name_val: SBValue | None = None
+        self._qstring_ty = self._target.FindFirstType("QString")
+        self._qdirp_ty = self._target.FindFirstType("QDirPrivate").GetPointerType()
+        self._has_priv = bool(self._qdirp_ty)
+        self._void_ptr = self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._is_64bit = self._target.GetAddressByteSize() == 8
+
+    def num_children(self):
+        if self._d_ptr is None:
+            return 0
+        return self._d_ptr.GetNumChildren()
+
+    def get_child_index(self, name: str):
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetIndexOfChildWithName(name)
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.NAME_INDEX:
+            return self._name_val
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetChildAtIndex(idx)
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._d_ptr = None
+        self._name_val = None
+        if self._has_priv:
+            self._d_ptr = self._valobj.Cast(self._qdirp_ty)
+            assert self._d_ptr is not None
+            self._name_val = self._d_ptr.GetChildMemberWithName(
+                "dirEntry"
+            ).GetChildMemberWithName("m_filePath")
+        elif self._is_64bit:
+            # offsetof(QDirPrivate, dirEntry) = 48 (64 bit)
+            d = self._valobj.Cast(self._void_ptr).GetValueAsAddress()
+            self._name_val = self._valobj.CreateValueFromAddress(
+                "", d + 48, self._qstring_ty
+            )
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:
