@@ -12,6 +12,7 @@ create_python_tests(
     SCRIPTS
         "${CMAKE_CURRENT_LIST_DIR}/../scripts/qt6.py"
     TESTS
+        QBasicAtomicInteger
         QByteArray
         QHash
         QCheckedInt
@@ -37,5 +38,6 @@ create_python_tests(
         QStringView
         QTime
         QUuid
+        QVariant
         QVarLengthArray
 )

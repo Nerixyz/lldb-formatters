@@ -7,7 +7,7 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 
 All types are tested (see [`tests/`](./tests/)).
 
-- [ ] `QBasicAtomicInteger<*>`
+- [x] `QBasicAtomicInteger<*>`
 - [ ] `QBasicAtomicPointer<*>`
 - [ ] `QBasicAtomicPointer<void>`
 - [x] `QByteArray`
@@ -73,7 +73,10 @@ All types are tested (see [`tests/`](./tests/)).
 - [ ] `QUrl`
 - [x] `QUuid`
 - [x] `QVarLengthArray<*,*>`
-- [ ] `QVariant`
+- [x] `QVariant`
+  > [!WARNING]
+  > While the primitive types like `int`, `QString`, or `QVariantMap` are supported, user-defined types that use templates might not work.
+  > The formatter looks up the type by the name embedded in the `QMetaType`. If that doesn't return any name, a `void*` is shown. Non-templates should work without problems.
 - [ ] `QVector2D`
 - [ ] `QVector3D`
 - [ ] `QVector4D`

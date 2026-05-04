@@ -70,6 +70,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QCborValue")
     add_summary("QJsonDocument")
     add_summary("QJsonValue")
+    add_summary("QVariant")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Multi)?Hash<.*>$", "size=${svar%#}", regex=True)
@@ -103,6 +104,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     _add_summary_string(dbg, ["QJsonArray", "QCborArray"], "[ size=${svar%#} ]")
 
     add_synthetic("QCheckedInt", regex="^QtPrivate::QCheckedIntegers::QCheckedInt<.*>$")
+    add_synthetic("QBasicAtomicInteger", regex="^QBasicAtomicInteger<.*>$")
     add_synthetic("QList", regex="^QList<.*>$")
     add_synthetic("QSize", other_names=["QSizeF"])
     add_synthetic("QRect")
@@ -125,6 +127,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QCborArray", other_names=["QJsonArray"])
     add_synthetic("QJsonValue")
     add_synthetic("QCborValue")
+    add_synthetic("QVariant")
 
 
 def _add_summary_string(
@@ -382,6 +385,20 @@ class QFlagsSyntheticProvider(lldb.SBSyntheticValueProvider):
 
     def has_children(self):
         return True
+
+    def get_value(self):
+        return self._val
+
+
+class QBasicAtomicIntegerSyntheticProvider(lldb.SBSyntheticValueProvider):
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._backend = valobj
+
+    def update(self):
+        self._val = (
+            self._backend.GetChildAtIndex(0).GetSyntheticValue().GetChildAtIndex(0)
+        )
+        return False
 
     def get_value(self):
         return self._val
@@ -1286,6 +1303,295 @@ class QJsonValueSyntheticProvider(_ExpandingSyntheticProvider):
 
     def get_value(self):
         return self._sval
+
+
+class QVariantType:
+    Unknown = 0
+    Bool = 1
+    Int = 2
+    UInt = 3
+    LongLong = 4
+    ULongLong = 5
+    Double = 6
+    Long = 32
+    Short = 33
+    Char = 34
+    ULong = 35
+    UShort = 36
+    UChar = 37
+    Float = 38
+    VoidStar = 31
+    QStringList = 11
+    QVariant = 41
+    QByteArrayList = 49
+    QObjectStar = 39
+    SChar = 40
+    Void = 43
+    Nullptr = 51
+    QVariantMap = 8
+    QVariantList = 9
+    QVariantHash = 28
+    QVariantPair = 58
+    Char16 = 56
+    Char32 = 57
+    Int128 = 59
+    UInt128 = 60
+    Float128 = 61
+    BFloat16 = 62
+    Float16 = 63
+
+    _is_init = False
+
+    @staticmethod
+    def enusure_init(tgt: SBTarget):
+        if QVariantType._is_init:
+            return
+        QVariantType._is_init = True
+        ty: SBType = tgt.FindFirstType("QMetaType::Type")
+        if not ty:
+            print("Failed to find QMetaType::Type")
+            return
+        members: lldb.SBTypeEnumMemberList = ty.GetEnumMembers()
+        for i in range(members.GetSize()):
+            member: lldb.SBTypeEnumMember = members.GetTypeEnumMemberAtIndex(i)
+            n: str = member.GetName()
+            v = member.GetValueAsUnsigned()
+            if not n.startswith("_") and n != "ensure_init":
+                setattr(QVariantType, n, v)
+
+
+class QVariantFlag:
+    NeedsConstruction = 0x1
+    NeedsDestruction = 0x2
+    RelocatableType = 0x4
+    PointerToQObject = 0x8
+    IsEnumeration = 0x10
+    SharedPointerToQObject = 0x20
+    WeakPointerToQObject = 0x40
+    TrackingPointerToQObject = 0x80
+    IsUnsignedEnumeration = 0x100
+    IsGadget = 0x200
+    PointerToGadget = 0x400
+    IsPointer = 0x800
+    IsQmlList = 0x1000
+    IsConst = 0x2000
+    NeedsCopyConstruction = 0x4000
+    NeedsMoveConstruction = 0x8000
+
+
+def QVariantSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    is_null = (
+        raw.GetChildMemberWithName("d")
+        .GetChildMemberWithName("is_null")
+        .GetValueAsUnsigned()
+        != 0
+    )
+    if is_null:
+        return "(null)"
+    val = valobj.GetChildAtIndex(QVariantSyntheticProvider.VALUE_INDEX)
+    if val:
+        return val.GetSummary() or ""
+    ty = valobj.GetChildAtIndex(QVariantSyntheticProvider.TYPE_OBJ_INDEX)
+    if ty:
+        s = ty.GetSummary().removeprefix('"').removesuffix('"')
+        return f"type={s}"
+    return "error"
+
+
+class QVariantSyntheticProvider:
+    TYPE_OBJ_INDEX = 0
+    VALUE_INDEX = 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target: SBTarget = valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._forwarder: SBValue | None = None
+        self._value_obj: SBValue | None = None
+        self._ty = QCborValueType.Undefined
+        self._type = QVariantType.Unknown
+        self._type_obj: SBValue | None = None
+        self._ty_interface = self._target.FindFirstType("QtPrivate::QMetaTypeInterface")
+        self._char_arr_ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(
+            0
+        )
+        QVariantType.enusure_init(self._target)
+
+    def num_children(self):
+        return 2
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        if name == "Type":
+            return self.TYPE_OBJ_INDEX
+        if name == "Value":
+            return self.VALUE_INDEX
+        return -1
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.TYPE_OBJ_INDEX:
+            return self._type_obj
+        if idx == self.VALUE_INDEX:
+            return self._value_obj
+        return
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._type_obj = None
+        self._value_obj = None
+
+        d: SBValue = self._valobj.GetChildMemberWithName("d")
+        is_null = d.GetChildMemberWithName("is_null").GetValueAsUnsigned() != 0
+        if is_null:
+            return  # nothing to do
+        # Lookup the data address
+        is_shared = d.GetChildMemberWithName("is_shared").GetValueAsUnsigned() != 0
+        data_union = d.GetChildMemberWithName("data")
+        if is_shared:
+            shared = data_union.GetChildMemberWithName("shared").GetValueAsAddress()
+            err = SBError()
+            off = self._process.ReadUnsignedFromMemory(shared + 4, 4, err)
+            if err.Fail():
+                return
+            data_addr = shared + off
+        else:
+            data_addr = data_union.GetChildMemberWithName("data").GetLoadAddress()
+
+        ty_addr = d.GetChildMemberWithName("packedType").GetValueAsUnsigned() << 2
+        ty_intf: SBValue = self._valobj.CreateValueFromAddress(
+            "", ty_addr, self._ty_interface
+        )
+        self._type_obj = (
+            ty_intf.GetChildMemberWithName("name")
+            .Dereference()
+            .Cast(self._char_arr_ty)
+            .Clone("[Type]")
+        )
+        self._type_obj.SetFormat(lldb.eFormatCharArray)  # type: ignore
+        self._type = (
+            ty_intf.GetChildMemberWithName("typeId")
+            .GetSyntheticValue()
+            .GetValueAsUnsigned()
+        )
+        flags = ty_intf.GetChildMemberWithName("flags").GetValueAsUnsigned()
+        ty = self._lookup_type(self._type, flags, self._type_obj)  # type: ignore
+        if ty:
+            self._value_obj = self._valobj.CreateValueFromAddress(
+                "[Value]", data_addr, ty
+            )
+        else:
+            # Hacky workaround to get a void* here.
+            char = self._target.GetBasicType(lldb.eBasicTypeChar)
+            void = self._target.GetBasicType(lldb.eBasicTypeVoid)
+            self._value_obj = (
+                self._valobj.CreateValueFromAddress("", data_addr, char)
+                .AddressOf()
+                .Cast(void.GetPointerType())
+                .Clone("[Value]")
+            )
+
+    def get_value(self):
+        return self._value_obj
+
+    def _lookup_type(self, id: int, flags: int, name_obj: SBValue):
+        match id:
+            case QVariantType.Unknown:
+                return None
+            case QVariantType.Bool:
+                return self._target.GetBasicType(lldb.eBasicTypeBool)
+            case QVariantType.Int:
+                return self._target.GetBasicType(lldb.eBasicTypeInt)
+            case QVariantType.UInt:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt)
+            case QVariantType.LongLong:
+                return self._target.GetBasicType(lldb.eBasicTypeLongLong)
+            case QVariantType.ULongLong:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedLongLong)
+            case QVariantType.Double:
+                return self._target.GetBasicType(lldb.eBasicTypeDouble)
+            case QVariantType.Long:
+                return self._target.GetBasicType(lldb.eBasicTypeLong)
+            case QVariantType.Short:
+                return self._target.GetBasicType(lldb.eBasicTypeShort)
+            case QVariantType.Char:
+                return self._target.GetBasicType(lldb.eBasicTypeChar)
+            case QVariantType.ULong:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedLong)
+            case QVariantType.UShort:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedShort)
+            case QVariantType.UChar:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedChar)
+            case QVariantType.Float:
+                return self._target.GetBasicType(lldb.eBasicTypeFloat)
+            case QVariantType.VoidStar:
+                return self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+            case QVariantType.QStringList:
+                return self._target.FindFirstType("QList<QString>")
+            case QVariantType.QVariant:
+                return self._valobj.GetType()
+            case QVariantType.QByteArrayList:
+                return self._target.FindFirstType("QList<QByteArray>")
+            case QVariantType.QObjectStar:
+                return self._target.FindFirstType("QObject").GetPointerType()
+            case QVariantType.SChar:
+                return self._target.GetBasicType(lldb.eBasicTypeSignedChar)
+            case QVariantType.Void:
+                return self._target.GetBasicType(lldb.eBasicTypeVoid)
+            case QVariantType.Nullptr:
+                return self._target.GetBasicType(lldb.eBasicTypeNullPtr)
+            case QVariantType.QVariantMap:
+                # Sometimes it's with a space and sometimes without
+                return self._target.FindFirstType(
+                    "QMap<QString, QVariant>"
+                ) or self._target.FindFirstType("QMap<QString,QVariant>")
+            case QVariantType.QVariantList:
+                return self._target.FindFirstType("QList<QVariant>")
+            case QVariantType.QVariantHash:
+                # Sometimes it's with a space and sometimes without
+                return self._target.FindFirstType(
+                    "QHash<QString, QVariant>"
+                ) or self._target.FindFirstType("QHash<QString,QVariant>")
+            case QVariantType.QVariantPair:
+                return self._target.FindFirstType("QPair<QVariant>")
+            case QVariantType.Char16:
+                return self._target.GetBasicType(lldb.eBasicTypeChar16)
+            case QVariantType.Char32:
+                return self._target.GetBasicType(lldb.eBasicTypeChar32)
+            case QVariantType.Int128:
+                return self._target.GetBasicType(lldb.eBasicTypeInt128)
+            case QVariantType.UInt128:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt128)
+            case QVariantType.Float128:
+                return self._target.GetBasicType(lldb.eBasicTypeFloat128)
+            case QVariantType.BFloat16:
+                pass
+            case QVariantType.Float16:
+                pass
+        # Lookup the type by name
+        name_addr = name_obj.GetLoadAddress()
+        proc: SBProcess = self._target.GetProcess()
+        err = SBError()
+        name: str = proc.ReadCStringFromMemory(name_addr, 2048, err)
+        if err.Fail():
+            return None
+        is_pointer = flags & QVariantFlag.IsPointer
+        is_const = flags & QVariantFlag.IsConst
+        if is_pointer:
+            name = name.removesuffix("*")
+        if is_const:
+            name.removeprefix("const")
+        name = name.strip()
+        ty = self._target.FindFirstType(name)
+        if not ty:
+            return None
+        if is_pointer:
+            ty = ty.GetPointerType()
+        return ty
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:
