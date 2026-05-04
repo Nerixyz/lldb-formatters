@@ -74,6 +74,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QDir")
     add_summary("QFile")
     add_summary("QFileInfo")
+    add_summary("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Multi)?Hash<.*>$", "size=${svar%#}", regex=True)
@@ -108,6 +109,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
 
     add_synthetic("QCheckedInt", regex="^QtPrivate::QCheckedIntegers::QCheckedInt<.*>$")
     add_synthetic("QBasicAtomicInteger", regex="^QBasicAtomic(Integer|Pointer)<.*>$")
+    add_synthetic("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     add_synthetic("QList", regex="^QList<.*>$")
     add_synthetic("QSize", other_names=["QSizeF"])
     add_synthetic("QRect")
@@ -1783,6 +1785,65 @@ class QFileInfoSyntheticProvider:
             self._name_val = self._valobj.CreateValueFromAddress(
                 "", d + 8, self._qstring_ty
             )
+
+
+def QGenericMatrixSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    m: SBType = raw.GetChildMemberWithName("m").GetType()
+    m_sz = m.GetByteSize()
+    m_el: SBType = m.GetArrayElementType()
+    m_el_sz = m_el.GetByteSize()
+    m_el_el_sz = m_el.GetArrayElementType().GetByteSize()
+    rows = m_el_sz // m_el_el_sz
+    cols = m_sz // m_el_sz
+    return f"{cols}x{rows}"
+
+
+class QGenericMatrixSyntheticProvider:
+    NAME_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self.m: SBValue = valobj.GetChildMemberWithName("m")
+        mt = self.m.GetType()
+        m_sz = mt.GetByteSize()
+        m_el: SBType = mt.GetArrayElementType()
+        m_el_sz = m_el.GetByteSize()
+        m_el_el_sz = m_el.GetArrayElementType().GetByteSize()
+        self.rows = m_el_sz // m_el_el_sz
+        self.cols = m_sz // m_el_sz
+
+    def num_children(self):
+        return self.rows * self.cols
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]").removeprefix("m")
+        try:
+            row = int(name[0]) - 1
+            col = int(name[1]) - 1
+            return col + row * self.cols
+        except BaseException:
+            return
+
+    def get_child_at_index(self, idx: int):
+        if idx > self.rows * self.cols:
+            return
+        row = idx // self.cols
+        col = idx % self.cols
+
+        return (
+            self.m.GetChildAtIndex(col)
+            .GetChildAtIndex(row)
+            .Clone(f"[m{row + 1}{col + 1}]")
+        )
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self.m = self._valobj.GetChildMemberWithName("m")
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:

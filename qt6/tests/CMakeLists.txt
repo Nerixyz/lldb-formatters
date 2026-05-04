@@ -23,6 +23,7 @@ create_python_tests(
         QFile
         QFileInfo
         QFlags
+        QGenericMatrix
         QHash
         QJsonArray
         QJsonDocument

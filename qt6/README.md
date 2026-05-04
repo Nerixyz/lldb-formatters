@@ -25,7 +25,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QFile` (🧪)
 - [x] `QFileInfo` (🧪)
 - [x] `QFlags<*>`
-- [ ] `QGenericMatrix<*,*,*>`
+- [x] `QGenericMatrix<*,*,*>` (`QMatrixNxM`)
 - [x] `QHash<*,*>`
 - [ ] `QHostAddress`
 - [ ] `QImage`
@@ -39,15 +39,6 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [ ] `QLineF`
 - [x] `QList<*>`
 - [x] `QMap<*,*>`
-- [ ] `QMatrix2x2`
-- [ ] `QMatrix2x3`
-- [ ] `QMatrix2x4`
-- [ ] `QMatrix3x2`
-- [ ] `QMatrix3x3`
-- [ ] `QMatrix3x4`
-- [ ] `QMatrix4x2`
-- [ ] `QMatrix4x3`
-- [ ] `QMatrix4x4`
 - [x] `QMultiHash<*,*>`
 - [ ] `QMultiMap<*,*>`
 - [ ] `QObject`
