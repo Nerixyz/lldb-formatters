@@ -14,12 +14,18 @@ create_python_tests(
     TESTS
         QBasicAtomicInteger
         QByteArray
-        QHash
-        QCheckedInt
         QChar
+        QCheckedInt
         QDate
         QDateTime
         QFlags
+        QHash
+        QJsonArray
+        QJsonDocument
+        QJsonObject
+        QJsonValue
+        QLine
+        QLineF
         QList
         QMap
         QMultiHash
@@ -30,10 +36,6 @@ create_python_tests(
         QSet
         QSize
         QSizeF
-        QJsonArray
-        QJsonDocument
-        QJsonObject
-        QJsonValue
         QString
         QStringView
         QTime
