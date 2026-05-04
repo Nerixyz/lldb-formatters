@@ -8,8 +8,8 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 All types are tested (see [`tests/`](./tests/)).
 
 - [x] `QBasicAtomicInteger<*>`
-- [ ] `QBasicAtomicPointer<*>`
-- [ ] `QBasicAtomicPointer<void>`
+- [x] `QBasicAtomicPointer<*>`
+- [x] `QBasicAtomicPointer<void>`
 - [x] `QByteArray`
 - [ ] `QCborArray` 🟡 (only the JSON subset)
 - [ ] `QCborContainerPrivate` 🟡 (only the JSON subset)

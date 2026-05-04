@@ -104,7 +104,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     _add_summary_string(dbg, ["QJsonArray", "QCborArray"], "[ size=${svar%#} ]")
 
     add_synthetic("QCheckedInt", regex="^QtPrivate::QCheckedIntegers::QCheckedInt<.*>$")
-    add_synthetic("QBasicAtomicInteger", regex="^QBasicAtomicInteger<.*>$")
+    add_synthetic("QBasicAtomicInteger", regex="^QBasicAtomic(Integer|Pointer)<.*>$")
     add_synthetic("QList", regex="^QList<.*>$")
     add_synthetic("QSize", other_names=["QSizeF"])
     add_synthetic("QRect")
