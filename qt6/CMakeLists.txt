@@ -3,6 +3,7 @@ find_package(Qt6 REQUIRED
         Core
         Gui
         Widgets
+        Network
 )
 
 qt_add_executable(qt6-app

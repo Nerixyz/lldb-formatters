@@ -9,6 +9,7 @@ create_python_tests(
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+        Qt6::Network
     SCRIPTS
         "${CMAKE_CURRENT_LIST_DIR}/../scripts/qt6.py"
     TESTS
@@ -25,6 +26,7 @@ create_python_tests(
         QFlags
         QGenericMatrix
         QHash
+        QHostAddress
         QJsonArray
         QJsonDocument
         QJsonObject

@@ -74,6 +74,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QDir")
     add_summary("QFile")
     add_summary("QFileInfo")
+    add_summary("QHostAddress")
     add_summary("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
@@ -136,6 +137,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QDir")
     add_synthetic("QFile")
     add_synthetic("QFileInfo")
+    add_synthetic("QHostAddress")
 
 
 def _add_summary_string(
@@ -1802,8 +1804,6 @@ def QGenericMatrixSummaryProvider(
 
 
 class QGenericMatrixSyntheticProvider:
-    NAME_INDEX = (1 << 32) - 1
-
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
         self.m: SBValue = valobj.GetChildMemberWithName("m")
@@ -1844,6 +1844,85 @@ class QGenericMatrixSyntheticProvider:
 
     def update(self):
         self.m = self._valobj.GetChildMemberWithName("m")
+
+
+def QHostAddressSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    tgt: SBTarget = valobj.GetTarget()
+    proc: SBProcess = tgt.GetProcess()
+    d_addr = raw.Cast(
+        tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+    ).GetValueAsAddress()
+    err = SBError()
+    proto = proc.ReadUnsignedFromMemory(d_addr + 52, 1, err)
+    if err.Fail():
+        return err.description
+    if proto == 0 or proto == 2:
+        # IPv4
+        a = proc.ReadUnsignedFromMemory(d_addr + 48, 4, err)
+        if err.Fail():
+            return err.description
+        return f"{a >> 24}.{(a >> 16) & 0xFF}.{(a >> 8) & 0xFF}.{a & 0xFF}"
+    elif proto != 1:
+        return "(invalid)"
+
+    v0 = proc.ReadUnsignedFromMemory(d_addr + 32, 8, err)
+    if err.Fail():
+        return err.description
+    v1 = proc.ReadUnsignedFromMemory(d_addr + 32 + 8, 8, err)
+    if err.Fail():
+        return err.description
+
+    def to_ipv6_part(v: int):
+        return f"{v & 0xFF:02x}{(v >> 8) & 0xFF:02x}:{(v >> 16) & 0xFF:02x}{(v >> 24) & 0xFF:02x}:{(v >> 32) & 0xFF:02x}{(v >> 40) & 0xFF:02x}:{(v >> 48) & 0xFF:02x}{v >> 56:02x}"
+
+    return f"{to_ipv6_part(v0)}:{to_ipv6_part(v1)}"
+
+
+class QHostAddressSyntheticProvider:
+    NAME_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        tgt = self._valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._void_ptr = tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._proto_ty = tgt.FindFirstType("QAbstractSocket::NetworkLayerProtocol")
+        self._qstring_ty = tgt.FindFirstType("QString")
+        self._scope_id = None
+        self._proto = None
+
+    def num_children(self):
+        return 2
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        match name:
+            case "Protocol":
+                return 0
+            case "ScopeID":
+                return 1
+
+    def get_child_at_index(self, idx: int):
+        match idx:
+            case 0:
+                return self._proto
+            case 1:
+                return self._scope_id
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        d_addr = self._valobj.Cast(self._void_ptr).GetValueAsAddress()
+        self._scope_id = self._valobj.CreateValueFromAddress(
+            "[ScopeID]", d_addr + 8, self._qstring_ty
+        )
+        proto = self._process.ReadUnsignedFromMemory(d_addr + 52, 1, SBError())
+        vo = _valobj_from_signed(self._valobj, proto, "[Protocol]")
+        self._proto = vo.Cast(self._proto_ty)
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:
