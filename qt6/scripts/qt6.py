@@ -86,6 +86,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     _add_summary_string(dbg, "^Q(Map|Set)<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^QMultiMap<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^QVarLengthArray<.*>$", "size=${svar%#}", regex=True)
+    _add_summary_string(dbg, "^QSpan<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(
         dbg, "^QHashPrivate::MultiNodeChain<.*>$", "size=${svar%#}", regex=True
     )
@@ -156,6 +157,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QObject")
     add_synthetic("QPolygon", other_names=["QPolygonF"])
     add_synthetic("QSizePolicy")
+    add_synthetic("QSpan", regex="^QSpan<.*>$")
 
 
 def _add_summary_string(
@@ -553,6 +555,30 @@ class QStringSyntheticProvider(_ArraySyntheticProvider):
 
     def _array_type(self, valobj: SBValue):
         return valobj.target.GetBasicType(lldb.eBasicTypeChar16)
+
+
+class QSpanSyntheticProvider(_ArraySyntheticProvider):
+    def __init__(self, valobj: SBValue, internal_dict):
+        super().__init__(valobj, internal_dict)
+        f = (
+            valobj.GetType()
+            .GetDirectBaseClassAtIndex(0)
+            .GetType()
+            .GetStaticFieldWithName("m_size")
+        )
+        if f:
+            self._csize = f.GetConstantValue(valobj.GetTarget()).GetValueAsUnsigned()
+        else:
+            self._csize = None
+
+    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue, int]:
+        ptr: SBValue = valobj.GetChildMemberWithName("m_data")
+        if self._csize is not None:
+            return (ptr, self._csize)
+        return (ptr, valobj.GetChildMemberWithName("m_size").GetValueAsUnsigned())
+
+    def _array_type(self, valobj: SBValue):
+        return valobj.type.GetPointeeType()
 
 
 class QByteArraySyntheticProvider(_ArraySyntheticProvider):

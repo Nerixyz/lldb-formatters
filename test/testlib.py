@@ -165,7 +165,7 @@ class ValueCheck:
             else f"Checking SBValue: {val}"
         )
 
-        test.assertSuccess(val.GetError())
+        test.assertSuccess(val.GetError(), msg)
 
         if self.name:
             test.assertMatch(self.name, val.GetName(), msg)

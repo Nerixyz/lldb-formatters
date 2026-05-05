@@ -57,7 +57,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QSize`
 - [x] `QSizeF`
 - [x] `QSizePolicy`
-- [ ] `QSpan<*>`
+- [x] `QSpan<*>`
 - [ ] `QSpecialInteger<*>`
 - [x] `QString`
 - [ ] ~~`QStringRef`~~ Qt 5 type
