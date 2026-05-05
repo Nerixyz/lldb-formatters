@@ -82,6 +82,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Multi)?Hash<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Map|Set)<.*>$", "size=${svar%#}", regex=True)
+    _add_summary_string(dbg, "^QMultiMap<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^QVarLengthArray<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(
         dbg, "^QHashPrivate::MultiNodeChain<.*>$", "size=${svar%#}", regex=True
@@ -128,6 +129,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QHashPrivateMultiChain", regex="^QHashPrivate::MultiNodeChain<.*>$")
     add_synthetic("QSet", regex="^QSet<.*>$")
     add_synthetic("QMap", regex="^QMap<.*>$")
+    add_synthetic("QMultiMap", regex="^QMultiMap<.*>$")
     add_synthetic("QVarLengthArray", regex="^QVarLengthArray<.*>$")
     add_synthetic("QFlags", regex="^QFlags<.*>$")
     add_synthetic("QJsonDocument")
@@ -453,6 +455,17 @@ class _ExpandingSyntheticProvider:
 
 
 class QMapSyntheticProvider(_ExpandingSyntheticProvider):
+    def _get_value(self, valobj: SBValue) -> SBValue:
+        return (
+            valobj.GetChildAtIndex(0)
+            .GetChildAtIndex(0)
+            .GetChildAtIndex(0)
+            .GetChildMemberWithName("m")
+            .GetSyntheticValue()
+        )
+
+
+class QMultiMapSyntheticProvider(_ExpandingSyntheticProvider):
     def _get_value(self, valobj: SBValue) -> SBValue:
         return (
             valobj.GetChildAtIndex(0)

@@ -40,7 +40,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QList<*>`
 - [x] `QMap<*,*>`
 - [x] `QMultiHash<*,*>`
-- [ ] `QMultiMap<*,*>`
+- [x] `QMultiMap<*,*>`
 - [ ] `QObject`
 - [ ] `QPair<*,*>`
 - [ ] `QPixmap`
