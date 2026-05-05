@@ -43,6 +43,8 @@ create_python_tests(
         QObject
         QPoint
         QPointF
+        QPolygon
+        QPolygonF
         QRect
         QRectF
         QSet

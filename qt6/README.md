@@ -42,12 +42,12 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QMultiHash<*,*>`
 - [x] `QMultiMap<*,*>`
 - [x] `QObject`
-- [ ] `QPair<*,*>`
+- [x] ~~`QPair<*,*>`~~ That's just `std::pair`
 - [ ] `QPixmap`
 - [x] `QPoint`
 - [x] `QPointF`
-- [ ] `QPolygon`
-- [ ] `QPolygonF`
+- [x] `QPolygon`
+- [x] `QPolygonF`
 - [x] `QPropertyData<*>`
 - [ ] `QQuickItem`
 - [ ] `QQuickItemPrivate`
@@ -60,7 +60,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [ ] `QSpan<*>`
 - [ ] `QSpecialInteger<*>`
 - [x] `QString`
-- [ ] `QStringRef`
+- [ ] ~~`QStringRef`~~ Qt 5 type
 - [x] `QStringView`
 - [x] `QTime`
 - [ ] `QUrl`

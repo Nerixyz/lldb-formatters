@@ -80,6 +80,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QObject")
     add_summary("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
+    _add_summary_string(dbg, ["QPolygon", "QPolygonF"], "size=${svar%#}")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Multi)?Hash<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Map|Set)<.*>$", "size=${svar%#}", regex=True)
@@ -148,6 +149,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QHostAddress")
     add_synthetic("QImage")
     add_synthetic("QObject")
+    add_synthetic("QPolygon", other_names=["QPolygonF"])
 
 
 def _add_summary_string(
@@ -456,6 +458,11 @@ class _ExpandingSyntheticProvider:
 
     def has_children(self):
         return True
+
+
+class QPolygonSyntheticProvider(_ExpandingSyntheticProvider):
+    def _get_value(self, valobj: SBValue) -> SBValue:
+        return valobj.GetChildAtIndex(0).GetSyntheticValue()  # QList<QPoint>
 
 
 class QMapSyntheticProvider(_ExpandingSyntheticProvider):
