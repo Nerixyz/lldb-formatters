@@ -63,7 +63,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [ ] ~~`QStringRef`~~ Qt 5 type
 - [x] `QStringView`
 - [x] `QTime`
-- [ ] `QUrl`
+- [x] `QUrl`
 - [x] `QUuid`
 - [x] `QVarLengthArray<*,*>`
 - [x] `QVariant`
@@ -73,4 +73,4 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [ ] `QVector2D`
 - [ ] `QVector3D`
 - [ ] `QVector4D`
-- [ ] `QVector<*>`
+- [ ] ~~`QVector<*>`~~ Qt 5 type (typedef to `QList`)

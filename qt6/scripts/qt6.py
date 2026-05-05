@@ -78,6 +78,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QHostAddress")
     add_summary("QImage")
     add_summary("QObject")
+    add_summary("QUrl")
     add_summary("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, ["QPolygon", "QPolygonF"], "size=${svar%#}")
@@ -158,6 +159,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QPolygon", other_names=["QPolygonF"])
     add_synthetic("QSizePolicy")
     add_synthetic("QSpan", regex="^QSpan<.*>$")
+    add_synthetic("QUrl")
 
 
 def _add_summary_string(
@@ -2337,6 +2339,180 @@ class QObjectSyntheticProvider:
             self._prop_values = self._valobj.CreateValueFromAddress(
                 "[PropertyValues]", ed_addr + prop_values_off, self._qvlist_ty()
             )
+
+
+def QUrlSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    v = valobj.GetChildAtIndex(QUrlSyntheticProvider.COMBINED_INDEX)
+    if not v:
+        return "(null)"
+    return v.GetSummary()
+
+
+class QUrlSyntheticProvider:
+    SCHEME_INDEX = 0
+    USERNAME_INDEX = 1
+    PASS_INDEX = 2
+    HOST_INDEX = 3
+    PORT_INDEX = 4
+    PATH_INDEX = 5
+    QUERY_INDEX = 6
+    FRAGMENT_INDEX = 7
+    COMBINED_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target = self._valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._void_ptr = self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._qstring_ty = self._target.FindFirstType("QString")
+        self._ptr_size = self._target.GetAddressByteSize()
+
+        self._scheme = None
+        self._user = None
+        self._pass = None
+        self._host = None
+        self._port = None
+        self._path = None
+        self._query = None
+        self._fragment = None
+        self._combined = None
+
+    def num_children(self):
+        return 8
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        match name:
+            case "Scheme":
+                return self.SCHEME_INDEX
+            case "Username":
+                return self.USERNAME_INDEX
+            case "Password":
+                return self.PASS_INDEX
+            case "Host":
+                return self.HOST_INDEX
+            case "Port":
+                return self.PORT_INDEX
+            case "Path":
+                return self.PATH_INDEX
+            case "Query":
+                return self.QUERY_INDEX
+            case "Fragment":
+                return self.FRAGMENT_INDEX
+
+    def get_child_at_index(self, idx: int):
+        match idx:
+            case self.SCHEME_INDEX:
+                return self._scheme
+            case self.USERNAME_INDEX:
+                return self._user
+            case self.PASS_INDEX:
+                return self._pass
+            case self.HOST_INDEX:
+                return self._host
+            case self.PORT_INDEX:
+                return self._port
+            case self.PATH_INDEX:
+                return self._path
+            case self.QUERY_INDEX:
+                return self._query
+            case self.FRAGMENT_INDEX:
+                return self._fragment
+            case self.COMBINED_INDEX:
+                return self._combined
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._scheme = None
+        self._user = None
+        self._pass = None
+        self._host = None
+        self._port = None
+        self._path = None
+        self._query = None
+        self._fragment = None
+        self._combined = None
+
+        d_addr = self._valobj.GetChildMemberWithName("d").GetValueAsAddress()
+        if d_addr == 0:
+            return
+
+        self._port = self._valobj.CreateValueFromAddress(
+            "[Port]", d_addr + 4, self._target.GetBasicType(lldb.eBasicTypeInt)
+        )
+        port = self._port.GetValueAsSigned()
+        self._scheme = self._make_nth("[Scheme]", d_addr, 0)
+        scheme = self._str_at(d_addr, 0)
+        self._user = self._make_nth("[Username]", d_addr, 1)
+        user = self._str_at(d_addr, 1)
+        self._pass = self._make_nth("[Password]", d_addr, 2)
+        _pass = self._str_at(d_addr, 2)
+        self._host = self._make_nth("[Host]", d_addr, 3)
+        host = self._str_at(d_addr, 3)
+        self._path = self._make_nth("[Path]", d_addr, 4)
+        path = self._str_at(d_addr, 4)
+        self._query = self._make_nth("[Query]", d_addr, 5)
+        query = self._str_at(d_addr, 5)
+        self._fragment = self._make_nth("[Fragment]", d_addr, 6)
+        fragment = self._str_at(d_addr, 6)
+
+        flags = self._process.ReadUnsignedFromMemory(
+            d_addr + 2 * 4 + 7 * 3 * self._ptr_size + self._ptr_size + 1, 1, SBError()
+        )
+        if 2 * 4 + 7 * 3 * self._ptr_size + self._ptr_size + 1 != 185:
+            print("XXXXXXXX")
+
+        url = ""
+        if scheme:
+            url += scheme + ":"
+        has_authority = user or _pass or host or port >= 0
+        path_is_absolute = path.startswith("/")
+        is_local_file = (flags & 0x1) != 0
+        if has_authority:
+            url += "//"
+            if user or _pass:
+                url += user
+                if _pass:
+                    url += ":" + _pass
+                url += "@"
+            url += host
+            if port >= 0:
+                url += ":" + str(port)
+        elif path_is_absolute and is_local_file:
+            url += "//"
+
+        url += path
+        if query:
+            url += "?" + query
+        if fragment:
+            url += "#" + fragment
+
+        self._combined = _valobj_from_str(self._valobj, url)
+
+    def _make_nth(self, name: str, base: int, nth: int):
+        return self._valobj.CreateValueFromAddress(
+            name, base + 2 * 4 + nth * 3 * self._ptr_size, self._qstring_ty
+        )
+
+    def _str_at(self, base: int, nth: int) -> str:
+        # XXX: This changes in Qt7 - [ptr, size, d]; Qt6: [d, ptr, size]
+        err = SBError()
+        base_ptr = base + 2 * 4 + nth * 3 * self._ptr_size
+        sz = self._process.ReadUnsignedFromMemory(base_ptr + 2 * self._ptr_size, 8, err)
+        if sz == 0:
+            return ""
+        addr = self._process.ReadPointerFromMemory(base_ptr + self._ptr_size, err)
+        if addr == 0:
+            return ""
+        s: bytes = self._process.ReadMemory(addr, sz * 2, err)
+        try:
+            return s.decode("utf-16le")
+        except BaseException as _:
+            return ""
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:

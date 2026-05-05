@@ -55,6 +55,7 @@ create_python_tests(
         QString
         QStringView
         QTime
+        QUrl
         QUuid
         QVariant
         QVarLengthArray
