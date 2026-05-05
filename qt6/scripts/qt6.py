@@ -70,6 +70,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QCborValue")
     add_summary("QJsonDocument")
     add_summary("QJsonValue")
+    add_summary("QJsonValueConstRef", other_names=["QJsonValueRef"])
     add_summary("QVariant")
     add_summary("QDir")
     add_summary("QFile")
@@ -133,6 +134,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QCborMap", other_names=["QJsonObject"])
     add_synthetic("QCborArray", other_names=["QJsonArray"])
     add_synthetic("QJsonValue")
+    add_synthetic("QJsonValueConstRef", other_names=["QJsonValueRef"])
     add_synthetic("QCborValue")
     add_synthetic("QVariant")
     add_synthetic("QDir")
@@ -358,6 +360,16 @@ def QJsonValueSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> str | None:
     v: SBValue = valobj.GetNonSyntheticValue().GetChildAtIndex(0).GetSyntheticValue()
+    s = v.GetSummary()
+    if s is None:
+        return ""
+    return s
+
+
+def QJsonValueConstRefSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    v: SBValue = valobj.GetChildAtIndex(QJsonValueConstRefSyntheticProvider.VALUE_IDX)
     s = v.GetSummary()
     if s is None:
         return ""
@@ -1312,6 +1324,32 @@ class QJsonValueSyntheticProvider(_ExpandingSyntheticProvider):
         v = valobj.GetChildAtIndex(0).GetSyntheticValue()
         self._sval = v.GetChildAtIndex(QCborValueSyntheticProvider.VALUE_INDEX)
         return v
+
+    def get_value(self):
+        return self._sval
+
+
+class QJsonValueConstRefSyntheticProvider(_ExpandingSyntheticProvider):
+    VALUE_IDX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        super().__init__(valobj, internal_dict)
+        self._sval = None
+
+    def _get_value(self, valobj: SBValue) -> SBValue:
+        # union -> obj / arr
+        is_obj = valobj.GetChildMemberWithName("is_object").GetValueAsUnsigned() != 0
+        v = valobj.GetChildAtIndex(0).GetChildMemberWithName("o" if is_obj else "a")
+        if v.GetValueAsAddress() == 0:
+            return SBValue()
+        idx = valobj.GetChildMemberWithName("index").GetValueAsUnsigned()
+        self._sval = v.Dereference().GetChildAtIndex(idx)
+        return self._sval
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.VALUE_IDX:
+            return self._sval
+        return super().get_child_at_index(idx)
 
     def get_value(self):
         return self._sval

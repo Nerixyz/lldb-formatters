@@ -33,8 +33,8 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QJsonDocument`
 - [x] `QJsonObject`
 - [x] `QJsonValue`
-- [ ] `QJsonValueConstRef`
-- [ ] `QJsonValueRef`
+- [x] `QJsonValueConstRef`
+- [x] `QJsonValueRef`
 - [ ] `QLine`
 - [ ] `QLineF`
 - [x] `QList<*>`

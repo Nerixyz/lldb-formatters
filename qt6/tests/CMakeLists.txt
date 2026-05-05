@@ -32,6 +32,8 @@ create_python_tests(
         QJsonDocument
         QJsonObject
         QJsonValue
+        QJsonValueConstRef
+        QJsonValueRef
         QLine
         QLineF
         QList
