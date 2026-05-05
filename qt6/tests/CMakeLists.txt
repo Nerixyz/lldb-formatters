@@ -40,6 +40,7 @@ create_python_tests(
         QMap
         QMultiHash
         QMultiMap
+        QObject
         QPoint
         QPointF
         QRect

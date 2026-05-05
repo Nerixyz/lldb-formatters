@@ -41,14 +41,14 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QMap<*,*>`
 - [x] `QMultiHash<*,*>`
 - [x] `QMultiMap<*,*>`
-- [ ] `QObject`
+- [x] `QObject`
 - [ ] `QPair<*,*>`
 - [ ] `QPixmap`
 - [x] `QPoint`
 - [x] `QPointF`
 - [ ] `QPolygon`
 - [ ] `QPolygonF`
-- [ ] `QPropertyData<*>`
+- [x] `QPropertyData<*>`
 - [ ] `QQuickItem`
 - [ ] `QQuickItemPrivate`
 - [x] `QRect`
