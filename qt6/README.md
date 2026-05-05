@@ -56,7 +56,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QSet<*>`
 - [x] `QSize`
 - [x] `QSizeF`
-- [ ] `QSizePolicy`
+- [x] `QSizePolicy`
 - [ ] `QSpan<*>`
 - [ ] `QSpecialInteger<*>`
 - [x] `QString`

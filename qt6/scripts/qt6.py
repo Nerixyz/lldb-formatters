@@ -109,6 +109,11 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
         "QRectF",
         "(x: ${var.xp}, y: ${var.yp}, width: ${var.w}, height: ${var.h})",
     )
+    _add_summary_string(
+        dbg,
+        "QSizePolicy",
+        "horizontal=${svar.HorizontalPolicy}, vertical=${svar.VerticalPolicy}",
+    )
     _add_summary_string(dbg, "QChar", "${var.ucs}")
     _add_summary_string(dbg, ["QJsonObject", "QCborMap"], "\\{ size=${svar%#} \\}")
     _add_summary_string(dbg, ["QJsonArray", "QCborArray"], "[ size=${svar%#} ]")
@@ -150,6 +155,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QImage")
     add_synthetic("QObject")
     add_synthetic("QPolygon", other_names=["QPolygonF"])
+    add_synthetic("QSizePolicy")
 
 
 def _add_summary_string(
@@ -622,15 +628,18 @@ class _DispatchedSynthetic:
         if existing is not None:
             return existing
         v = self._get_at_index(idx)
-        self._cache[idx] = v
+        self._cache[idx] = SBValue() if v is None else v
         return v
 
     def _get_at_index(self, idx: int):
         key, item = self.items[idx]
         if isinstance(item, str):
-            return self._valobj.GetChildMemberWithName(item).Clone(f"[{key}]")
-        # else: callable
-        return item(self, self._valobj).Clone(f"[{key}]")
+            v = self._valobj.GetChildMemberWithName(item)
+        else:
+            v = item(self, self._valobj)
+
+        if v is not None:
+            return v.Clone(f"[{key}]")
 
     def update(self):
         self._cache.clear()
@@ -672,6 +681,57 @@ class QRectFSyntheticProvider(_DispatchedSynthetic):
         ("y", "yp"),
         ("width", "w"),
         ("height", "h"),
+    ]
+
+
+class QSizePolicySyntheticProvider(_DispatchedSynthetic):
+    def __init__(self, valobj: SBValue, internal_dict):
+        super().__init__(valobj, internal_dict)
+        self._policy = valobj.GetTarget().FindFirstType("QSizePolicy::Policy")
+        self._control = valobj.GetTarget().FindFirstType("QSizePolicy::ControlType")
+
+    def update(self):
+        self._bits: SBValue = self._valobj.GetChildAtIndex(0).GetChildMemberWithName(
+            "bits"
+        )
+        return super().update()
+
+    def _get_hstretch(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("horStretch").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v)
+
+    def _get_vstretch(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("verStretch").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v)
+
+    def _get_hpolicy(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("horPolicy").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v).Cast(self._policy)
+
+    def _get_vpolicy(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("verPolicy").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v).Cast(self._policy)
+
+    def _get_hfw(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("hfw").GetValueAsUnsigned()
+        return valobj.CreateBoolValue("", v != 0)
+
+    def _get_wfh(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("wfh").GetValueAsUnsigned()
+        return valobj.CreateBoolValue("", v != 0)
+
+    def _get_control(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("ctype").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, 1 << v).Cast(self._control)
+
+    items = [
+        ("HorizontalPolicy", _get_hpolicy),
+        ("VerticalPolicy", _get_vpolicy),
+        ("HorizontalStretch", _get_hstretch),
+        ("VerticalStretch", _get_vstretch),
+        ("ControlType", _get_control),
+        ("HeightForWidth", _get_hfw),
+        ("WidthForHeight", _get_wfh),
     ]
 
 

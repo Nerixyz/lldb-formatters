@@ -50,6 +50,7 @@ create_python_tests(
         QSet
         QSize
         QSizeF
+        QSizePolicy
         QString
         QStringView
         QTime
