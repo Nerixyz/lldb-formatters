@@ -70,11 +70,24 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QCborValue")
     add_summary("QJsonDocument")
     add_summary("QJsonValue")
+    add_summary("QJsonValueConstRef", other_names=["QJsonValueRef"])
+    add_summary("QVariant")
+    add_summary("QDir")
+    add_summary("QFile")
+    add_summary("QFileInfo")
+    add_summary("QHostAddress")
+    add_summary("QImage")
+    add_summary("QObject")
+    add_summary("QUrl")
+    add_summary("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
+    _add_summary_string(dbg, ["QPolygon", "QPolygonF"], "size=${svar%#}")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Multi)?Hash<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^Q(Map|Set)<.*>$", "size=${svar%#}", regex=True)
+    _add_summary_string(dbg, "^QMultiMap<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(dbg, "^QVarLengthArray<.*>$", "size=${svar%#}", regex=True)
+    _add_summary_string(dbg, "^QSpan<.*>$", "size=${svar%#}", regex=True)
     _add_summary_string(
         dbg, "^QHashPrivate::MultiNodeChain<.*>$", "size=${svar%#}", regex=True
     )
@@ -98,11 +111,20 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
         "QRectF",
         "(x: ${var.xp}, y: ${var.yp}, width: ${var.w}, height: ${var.h})",
     )
+    _add_summary_string(
+        dbg,
+        "QSizePolicy",
+        "horizontal=${svar.HorizontalPolicy}, vertical=${svar.VerticalPolicy}",
+    )
     _add_summary_string(dbg, "QChar", "${var.ucs}")
     _add_summary_string(dbg, ["QJsonObject", "QCborMap"], "\\{ size=${svar%#} \\}")
     _add_summary_string(dbg, ["QJsonArray", "QCborArray"], "[ size=${svar%#} ]")
+    _add_summary_string(dbg, "^QPropertyData<.*>$", "${var.val}", regex=True)
+    _add_summary_string(dbg, "^QObjectCompatProperty<.*>$", "${var.val}", regex=True)
 
     add_synthetic("QCheckedInt", regex="^QtPrivate::QCheckedIntegers::QCheckedInt<.*>$")
+    add_synthetic("QBasicAtomicInteger", regex="^QBasicAtomic(Integer|Pointer)<.*>$")
+    add_synthetic("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     add_synthetic("QList", regex="^QList<.*>$")
     add_synthetic("QSize", other_names=["QSizeF"])
     add_synthetic("QRect")
@@ -118,13 +140,26 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QHashPrivateMultiChain", regex="^QHashPrivate::MultiNodeChain<.*>$")
     add_synthetic("QSet", regex="^QSet<.*>$")
     add_synthetic("QMap", regex="^QMap<.*>$")
+    add_synthetic("QMultiMap", regex="^QMultiMap<.*>$")
     add_synthetic("QVarLengthArray", regex="^QVarLengthArray<.*>$")
     add_synthetic("QFlags", regex="^QFlags<.*>$")
     add_synthetic("QJsonDocument")
     add_synthetic("QCborMap", other_names=["QJsonObject"])
     add_synthetic("QCborArray", other_names=["QJsonArray"])
     add_synthetic("QJsonValue")
+    add_synthetic("QJsonValueConstRef", other_names=["QJsonValueRef"])
     add_synthetic("QCborValue")
+    add_synthetic("QVariant")
+    add_synthetic("QDir")
+    add_synthetic("QFile")
+    add_synthetic("QFileInfo")
+    add_synthetic("QHostAddress")
+    add_synthetic("QImage")
+    add_synthetic("QObject")
+    add_synthetic("QPolygon", other_names=["QPolygonF"])
+    add_synthetic("QSizePolicy")
+    add_synthetic("QSpan", regex="^QSpan<.*>$")
+    add_synthetic("QUrl")
 
 
 def _add_summary_string(
@@ -349,6 +384,16 @@ def QJsonValueSummaryProvider(
     return s
 
 
+def QJsonValueConstRefSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    v: SBValue = valobj.GetChildAtIndex(QJsonValueConstRefSyntheticProvider.VALUE_IDX)
+    s = v.GetSummary()
+    if s is None:
+        return ""
+    return s
+
+
 class _FirstChildSyntheticProvider(lldb.SBSyntheticValueProvider):
     def __init__(self, valobj: SBValue, internal_dict):
         self._backend = valobj
@@ -387,6 +432,20 @@ class QFlagsSyntheticProvider(lldb.SBSyntheticValueProvider):
         return self._val
 
 
+class QBasicAtomicIntegerSyntheticProvider(lldb.SBSyntheticValueProvider):
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._backend = valobj
+
+    def update(self):
+        self._val = (
+            self._backend.GetChildAtIndex(0).GetSyntheticValue().GetChildAtIndex(0)
+        )
+        return False
+
+    def get_value(self):
+        return self._val
+
+
 class _ExpandingSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._backend = valobj
@@ -411,7 +470,23 @@ class _ExpandingSyntheticProvider:
         return True
 
 
+class QPolygonSyntheticProvider(_ExpandingSyntheticProvider):
+    def _get_value(self, valobj: SBValue) -> SBValue:
+        return valobj.GetChildAtIndex(0).GetSyntheticValue()  # QList<QPoint>
+
+
 class QMapSyntheticProvider(_ExpandingSyntheticProvider):
+    def _get_value(self, valobj: SBValue) -> SBValue:
+        return (
+            valobj.GetChildAtIndex(0)
+            .GetChildAtIndex(0)
+            .GetChildAtIndex(0)
+            .GetChildMemberWithName("m")
+            .GetSyntheticValue()
+        )
+
+
+class QMultiMapSyntheticProvider(_ExpandingSyntheticProvider):
     def _get_value(self, valobj: SBValue) -> SBValue:
         return (
             valobj.GetChildAtIndex(0)
@@ -482,6 +557,30 @@ class QStringSyntheticProvider(_ArraySyntheticProvider):
 
     def _array_type(self, valobj: SBValue):
         return valobj.target.GetBasicType(lldb.eBasicTypeChar16)
+
+
+class QSpanSyntheticProvider(_ArraySyntheticProvider):
+    def __init__(self, valobj: SBValue, internal_dict):
+        super().__init__(valobj, internal_dict)
+        f = (
+            valobj.GetType()
+            .GetDirectBaseClassAtIndex(0)
+            .GetType()
+            .GetStaticFieldWithName("m_size")
+        )
+        if f:
+            self._csize = f.GetConstantValue(valobj.GetTarget()).GetValueAsUnsigned()
+        else:
+            self._csize = None
+
+    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue, int]:
+        ptr: SBValue = valobj.GetChildMemberWithName("m_data")
+        if self._csize is not None:
+            return (ptr, self._csize)
+        return (ptr, valobj.GetChildMemberWithName("m_size").GetValueAsUnsigned())
+
+    def _array_type(self, valobj: SBValue):
+        return valobj.type.GetPointeeType()
 
 
 class QByteArraySyntheticProvider(_ArraySyntheticProvider):
@@ -557,15 +656,18 @@ class _DispatchedSynthetic:
         if existing is not None:
             return existing
         v = self._get_at_index(idx)
-        self._cache[idx] = v
+        self._cache[idx] = SBValue() if v is None else v
         return v
 
     def _get_at_index(self, idx: int):
         key, item = self.items[idx]
         if isinstance(item, str):
-            return self._valobj.GetChildMemberWithName(item).Clone(f"[{key}]")
-        # else: callable
-        return item(self, self._valobj).Clone(f"[{key}]")
+            v = self._valobj.GetChildMemberWithName(item)
+        else:
+            v = item(self, self._valobj)
+
+        if v is not None:
+            return v.Clone(f"[{key}]")
 
     def update(self):
         self._cache.clear()
@@ -607,6 +709,57 @@ class QRectFSyntheticProvider(_DispatchedSynthetic):
         ("y", "yp"),
         ("width", "w"),
         ("height", "h"),
+    ]
+
+
+class QSizePolicySyntheticProvider(_DispatchedSynthetic):
+    def __init__(self, valobj: SBValue, internal_dict):
+        super().__init__(valobj, internal_dict)
+        self._policy = valobj.GetTarget().FindFirstType("QSizePolicy::Policy")
+        self._control = valobj.GetTarget().FindFirstType("QSizePolicy::ControlType")
+
+    def update(self):
+        self._bits: SBValue = self._valobj.GetChildAtIndex(0).GetChildMemberWithName(
+            "bits"
+        )
+        return super().update()
+
+    def _get_hstretch(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("horStretch").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v)
+
+    def _get_vstretch(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("verStretch").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v)
+
+    def _get_hpolicy(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("horPolicy").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v).Cast(self._policy)
+
+    def _get_vpolicy(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("verPolicy").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, v).Cast(self._policy)
+
+    def _get_hfw(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("hfw").GetValueAsUnsigned()
+        return valobj.CreateBoolValue("", v != 0)
+
+    def _get_wfh(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("wfh").GetValueAsUnsigned()
+        return valobj.CreateBoolValue("", v != 0)
+
+    def _get_control(self, valobj: SBValue):
+        v = self._bits.GetChildMemberWithName("ctype").GetValueAsUnsigned()
+        return _valobj_from_signed(self._bits, 1 << v).Cast(self._control)
+
+    items = [
+        ("HorizontalPolicy", _get_hpolicy),
+        ("VerticalPolicy", _get_vpolicy),
+        ("HorizontalStretch", _get_hstretch),
+        ("VerticalStretch", _get_vstretch),
+        ("ControlType", _get_control),
+        ("HeightForWidth", _get_hfw),
+        ("WidthForHeight", _get_wfh),
     ]
 
 
@@ -1286,6 +1439,1080 @@ class QJsonValueSyntheticProvider(_ExpandingSyntheticProvider):
 
     def get_value(self):
         return self._sval
+
+
+class QJsonValueConstRefSyntheticProvider(_ExpandingSyntheticProvider):
+    VALUE_IDX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        super().__init__(valobj, internal_dict)
+        self._sval = None
+
+    def _get_value(self, valobj: SBValue) -> SBValue:
+        # union -> obj / arr
+        is_obj = valobj.GetChildMemberWithName("is_object").GetValueAsUnsigned() != 0
+        v = valobj.GetChildAtIndex(0).GetChildMemberWithName("o" if is_obj else "a")
+        if v.GetValueAsAddress() == 0:
+            return SBValue()
+        idx = valobj.GetChildMemberWithName("index").GetValueAsUnsigned()
+        self._sval = v.Dereference().GetChildAtIndex(idx)
+        return self._sval
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.VALUE_IDX:
+            return self._sval
+        return super().get_child_at_index(idx)
+
+    def get_value(self):
+        return self._sval
+
+
+class QVariantType:
+    Unknown = 0
+    Bool = 1
+    Int = 2
+    UInt = 3
+    LongLong = 4
+    ULongLong = 5
+    Double = 6
+    Long = 32
+    Short = 33
+    Char = 34
+    ULong = 35
+    UShort = 36
+    UChar = 37
+    Float = 38
+    VoidStar = 31
+    QStringList = 11
+    QVariant = 41
+    QByteArrayList = 49
+    QObjectStar = 39
+    SChar = 40
+    Void = 43
+    Nullptr = 51
+    QVariantMap = 8
+    QVariantList = 9
+    QVariantHash = 28
+    QVariantPair = 58
+    Char16 = 56
+    Char32 = 57
+    Int128 = 59
+    UInt128 = 60
+    Float128 = 61
+    BFloat16 = 62
+    Float16 = 63
+
+    _is_init = False
+
+    @staticmethod
+    def enusure_init(tgt: SBTarget):
+        if QVariantType._is_init:
+            return
+        QVariantType._is_init = True
+        ty: SBType = tgt.FindFirstType("QMetaType::Type")
+        if not ty:
+            print("Failed to find QMetaType::Type")
+            return
+        members: lldb.SBTypeEnumMemberList = ty.GetEnumMembers()
+        for i in range(members.GetSize()):
+            member: lldb.SBTypeEnumMember = members.GetTypeEnumMemberAtIndex(i)
+            n: str = member.GetName()
+            v = member.GetValueAsUnsigned()
+            if not n.startswith("_") and n != "ensure_init":
+                setattr(QVariantType, n, v)
+
+
+class QVariantFlag:
+    NeedsConstruction = 0x1
+    NeedsDestruction = 0x2
+    RelocatableType = 0x4
+    PointerToQObject = 0x8
+    IsEnumeration = 0x10
+    SharedPointerToQObject = 0x20
+    WeakPointerToQObject = 0x40
+    TrackingPointerToQObject = 0x80
+    IsUnsignedEnumeration = 0x100
+    IsGadget = 0x200
+    PointerToGadget = 0x400
+    IsPointer = 0x800
+    IsQmlList = 0x1000
+    IsConst = 0x2000
+    NeedsCopyConstruction = 0x4000
+    NeedsMoveConstruction = 0x8000
+
+
+def QVariantSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    is_null = (
+        raw.GetChildMemberWithName("d")
+        .GetChildMemberWithName("is_null")
+        .GetValueAsUnsigned()
+        != 0
+    )
+    if is_null:
+        return "(null)"
+    val = valobj.GetChildAtIndex(QVariantSyntheticProvider.VALUE_INDEX)
+    if val:
+        return val.GetSummary() or ""
+    ty = valobj.GetChildAtIndex(QVariantSyntheticProvider.TYPE_OBJ_INDEX)
+    if ty:
+        s = ty.GetSummary().removeprefix('"').removesuffix('"')
+        return f"type={s}"
+    return "error"
+
+
+class QVariantSyntheticProvider:
+    TYPE_OBJ_INDEX = 0
+    VALUE_INDEX = 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target: SBTarget = valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._forwarder: SBValue | None = None
+        self._value_obj: SBValue | None = None
+        self._ty = QCborValueType.Undefined
+        self._type = QVariantType.Unknown
+        self._type_obj: SBValue | None = None
+        self._ty_interface = self._target.FindFirstType("QtPrivate::QMetaTypeInterface")
+        self._char_arr_ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(
+            0
+        )
+        QVariantType.enusure_init(self._target)
+
+    def num_children(self):
+        return 2
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        if name == "Type":
+            return self.TYPE_OBJ_INDEX
+        if name == "Value":
+            return self.VALUE_INDEX
+        return -1
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.TYPE_OBJ_INDEX:
+            return self._type_obj
+        if idx == self.VALUE_INDEX:
+            return self._value_obj
+        return
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._type_obj = None
+        self._value_obj = None
+
+        d: SBValue = self._valobj.GetChildMemberWithName("d")
+        is_null = d.GetChildMemberWithName("is_null").GetValueAsUnsigned() != 0
+        if is_null:
+            return  # nothing to do
+        # Lookup the data address
+        is_shared = d.GetChildMemberWithName("is_shared").GetValueAsUnsigned() != 0
+        data_union = d.GetChildMemberWithName("data")
+        if is_shared:
+            shared = data_union.GetChildMemberWithName("shared").GetValueAsAddress()
+            err = SBError()
+            off = self._process.ReadUnsignedFromMemory(shared + 4, 4, err)
+            if err.Fail():
+                return
+            data_addr = shared + off
+        else:
+            data_addr = data_union.GetChildMemberWithName("data").GetLoadAddress()
+
+        ty_addr = d.GetChildMemberWithName("packedType").GetValueAsUnsigned() << 2
+        ty_intf: SBValue = self._valobj.CreateValueFromAddress(
+            "", ty_addr, self._ty_interface
+        )
+        self._type_obj = (
+            ty_intf.GetChildMemberWithName("name")
+            .Dereference()
+            .Cast(self._char_arr_ty)
+            .Clone("[Type]")
+        )
+        self._type_obj.SetFormat(lldb.eFormatCharArray)  # type: ignore
+        self._type = (
+            ty_intf.GetChildMemberWithName("typeId")
+            .GetSyntheticValue()
+            .GetValueAsUnsigned()
+        )
+        flags = ty_intf.GetChildMemberWithName("flags").GetValueAsUnsigned()
+        ty = self._lookup_type(self._type, flags, self._type_obj)  # type: ignore
+        if ty:
+            self._value_obj = self._valobj.CreateValueFromAddress(
+                "[Value]", data_addr, ty
+            )
+        else:
+            # Hacky workaround to get a void* here.
+            char = self._target.GetBasicType(lldb.eBasicTypeChar)
+            void = self._target.GetBasicType(lldb.eBasicTypeVoid)
+            self._value_obj = (
+                self._valobj.CreateValueFromAddress("", data_addr, char)
+                .AddressOf()
+                .Cast(void.GetPointerType())
+                .Clone("[Value]")
+            )
+
+    def get_value(self):
+        return self._value_obj
+
+    def _lookup_type(self, id: int, flags: int, name_obj: SBValue):
+        match id:
+            case QVariantType.Unknown:
+                return None
+            case QVariantType.Bool:
+                return self._target.GetBasicType(lldb.eBasicTypeBool)
+            case QVariantType.Int:
+                return self._target.GetBasicType(lldb.eBasicTypeInt)
+            case QVariantType.UInt:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt)
+            case QVariantType.LongLong:
+                return self._target.GetBasicType(lldb.eBasicTypeLongLong)
+            case QVariantType.ULongLong:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedLongLong)
+            case QVariantType.Double:
+                return self._target.GetBasicType(lldb.eBasicTypeDouble)
+            case QVariantType.Long:
+                return self._target.GetBasicType(lldb.eBasicTypeLong)
+            case QVariantType.Short:
+                return self._target.GetBasicType(lldb.eBasicTypeShort)
+            case QVariantType.Char:
+                return self._target.GetBasicType(lldb.eBasicTypeChar)
+            case QVariantType.ULong:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedLong)
+            case QVariantType.UShort:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedShort)
+            case QVariantType.UChar:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedChar)
+            case QVariantType.Float:
+                return self._target.GetBasicType(lldb.eBasicTypeFloat)
+            case QVariantType.VoidStar:
+                return self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+            case QVariantType.QStringList:
+                return self._target.FindFirstType("QList<QString>")
+            case QVariantType.QVariant:
+                return self._valobj.GetType()
+            case QVariantType.QByteArrayList:
+                return self._target.FindFirstType("QList<QByteArray>")
+            case QVariantType.QObjectStar:
+                return self._target.FindFirstType("QObject").GetPointerType()
+            case QVariantType.SChar:
+                return self._target.GetBasicType(lldb.eBasicTypeSignedChar)
+            case QVariantType.Void:
+                return self._target.GetBasicType(lldb.eBasicTypeVoid)
+            case QVariantType.Nullptr:
+                return self._target.GetBasicType(lldb.eBasicTypeNullPtr)
+            case QVariantType.QVariantMap:
+                # Sometimes it's with a space and sometimes without
+                return self._target.FindFirstType(
+                    "QMap<QString, QVariant>"
+                ) or self._target.FindFirstType("QMap<QString,QVariant>")
+            case QVariantType.QVariantList:
+                return self._target.FindFirstType("QList<QVariant>")
+            case QVariantType.QVariantHash:
+                # Sometimes it's with a space and sometimes without
+                return self._target.FindFirstType(
+                    "QHash<QString, QVariant>"
+                ) or self._target.FindFirstType("QHash<QString,QVariant>")
+            case QVariantType.QVariantPair:
+                return self._target.FindFirstType("QPair<QVariant>")
+            case QVariantType.Char16:
+                return self._target.GetBasicType(lldb.eBasicTypeChar16)
+            case QVariantType.Char32:
+                return self._target.GetBasicType(lldb.eBasicTypeChar32)
+            case QVariantType.Int128:
+                return self._target.GetBasicType(lldb.eBasicTypeInt128)
+            case QVariantType.UInt128:
+                return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt128)
+            case QVariantType.Float128:
+                return self._target.GetBasicType(lldb.eBasicTypeFloat128)
+            case QVariantType.BFloat16:
+                pass
+            case QVariantType.Float16:
+                pass
+        # Lookup the type by name
+        name_addr = name_obj.GetLoadAddress()
+        proc: SBProcess = self._target.GetProcess()
+        err = SBError()
+        name: str = proc.ReadCStringFromMemory(name_addr, 2048, err)
+        if err.Fail():
+            return None
+        is_pointer = flags & QVariantFlag.IsPointer
+        is_const = flags & QVariantFlag.IsConst
+        if is_pointer:
+            name = name.removesuffix("*")
+        if is_const:
+            name.removeprefix("const")
+        name = name.strip()
+        ty = self._target.FindFirstType(name)
+        if not ty:
+            return None
+        if is_pointer:
+            ty = ty.GetPointerType()
+        return ty
+
+
+def QDirSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    vo = valobj.GetChildAtIndex(QDirSyntheticProvider.NAME_INDEX)
+    if not vo:
+        return ""
+    return vo.GetSummary() or ""
+
+
+class QDirSyntheticProvider:
+    NAME_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target: SBTarget = valobj.GetTarget()
+        self._d_ptr: SBValue | None = None
+        self._name_val: SBValue | None = None
+        self._qstring_ty = self._target.FindFirstType("QString")
+        self._qdirp_ty = self._target.FindFirstType("QDirPrivate").GetPointerType()
+        self._has_priv = bool(self._qdirp_ty)
+        self._void_ptr = self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._is_64bit = self._target.GetAddressByteSize() == 8
+
+    def num_children(self):
+        if self._d_ptr is None:
+            return 0
+        return self._d_ptr.GetNumChildren()
+
+    def get_child_index(self, name: str):
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetIndexOfChildWithName(name)
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.NAME_INDEX:
+            return self._name_val
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetChildAtIndex(idx)
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._d_ptr = None
+        self._name_val = None
+        if self._has_priv:
+            self._d_ptr = self._valobj.Cast(self._qdirp_ty)
+            assert self._d_ptr is not None
+            self._name_val = self._d_ptr.GetChildMemberWithName(
+                "dirEntry"
+            ).GetChildMemberWithName("m_filePath")
+        elif self._is_64bit:
+            # offsetof(QDirPrivate, dirEntry) = 48 (64 bit)
+            d = self._valobj.Cast(self._void_ptr).GetValueAsAddress()
+            self._name_val = self._valobj.CreateValueFromAddress(
+                "", d + 48, self._qstring_ty
+            )
+
+
+def QFileSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    vo = valobj.GetChildAtIndex(QFileSyntheticProvider.NAME_INDEX)
+    if not vo:
+        return ""
+    return vo.GetSummary() or ""
+
+
+class QFileSyntheticProvider:
+    NAME_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target: SBTarget = valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._d_ptr: SBValue | None = None
+        self._name_val: SBValue | None = None
+        self._qstring_ty = self._target.FindFirstType("QString")
+        self._qfilep_ty = self._target.FindFirstType("QFilePrivate")
+        self._has_priv = bool(self._qfilep_ty)
+        self._void_ptr = self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._addr_bytes = self._target.GetAddressByteSize()
+
+    def num_children(self):
+        if self._d_ptr is None:
+            return 0
+        return self._d_ptr.GetNumChildren()
+
+    def get_child_index(self, name: str):
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetIndexOfChildWithName(name)
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.NAME_INDEX:
+            return self._name_val
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetChildAtIndex(idx)
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._d_ptr = None
+        self._name_val = None
+        d_ptr_ptr = self._valobj.GetLoadAddress() + self._addr_bytes  # skip vtable
+        err = SBError()
+        d_ptr_val = self._process.ReadPointerFromMemory(d_ptr_ptr, err)
+        if err.Fail():
+            return
+        if self._has_priv:
+            self._d_ptr = self._valobj.CreateValueFromAddress(
+                "", d_ptr_val, self._qfilep_ty
+            )
+            assert self._d_ptr is not None
+            self._name_val = self._d_ptr.GetChildMemberWithName("fileName")
+        elif self._addr_bytes == 8:
+            # offsetof(QFilePrivate, fileName) = 424 (64 bit)
+            self._name_val = self._valobj.CreateValueFromAddress(
+                "", d_ptr_val + 424, self._qstring_ty
+            )
+
+
+def QFileInfoSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    vo = valobj.GetChildAtIndex(QFileInfoSyntheticProvider.NAME_INDEX)
+    if not vo:
+        return ""
+    return vo.GetSummary() or ""
+
+
+class QFileInfoSyntheticProvider:
+    NAME_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target: SBTarget = valobj.GetTarget()
+        self._d_ptr: SBValue | None = None
+        self._name_val: SBValue | None = None
+        self._qstring_ty = self._target.FindFirstType("QString")
+        self._qfip_ty = self._target.FindFirstType("QFileInfoPrivate").GetPointerType()
+        self._has_priv = bool(self._qfip_ty)
+        self._void_ptr = self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._is_64bit = self._target.GetAddressByteSize() == 8
+
+    def num_children(self):
+        if self._d_ptr is None:
+            return 0
+        return self._d_ptr.GetNumChildren()
+
+    def get_child_index(self, name: str):
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetIndexOfChildWithName(name)
+
+    def get_child_at_index(self, idx: int):
+        if idx == self.NAME_INDEX:
+            return self._name_val
+        if self._d_ptr is None:
+            return
+        return self._d_ptr.GetChildAtIndex(idx)
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._d_ptr = None
+        self._name_val = None
+        if self._has_priv:
+            self._d_ptr = self._valobj.Cast(self._qfip_ty)
+            assert self._d_ptr is not None
+            self._name_val = self._d_ptr.GetChildMemberWithName(
+                "fileEntry"
+            ).GetChildMemberWithName("m_filePath")
+        elif self._is_64bit:
+            # offsetof(QFileInfoPrivate, fileEntry) = 8 (64 bit)
+            d = self._valobj.Cast(self._void_ptr).GetValueAsAddress()
+            self._name_val = self._valobj.CreateValueFromAddress(
+                "", d + 8, self._qstring_ty
+            )
+
+
+def QGenericMatrixSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    m: SBType = raw.GetChildMemberWithName("m").GetType()
+    m_sz = m.GetByteSize()
+    m_el: SBType = m.GetArrayElementType()
+    m_el_sz = m_el.GetByteSize()
+    m_el_el_sz = m_el.GetArrayElementType().GetByteSize()
+    rows = m_el_sz // m_el_el_sz
+    cols = m_sz // m_el_sz
+    return f"{cols}x{rows}"
+
+
+class QGenericMatrixSyntheticProvider:
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self.m: SBValue = valobj.GetChildMemberWithName("m")
+        mt = self.m.GetType()
+        m_sz = mt.GetByteSize()
+        m_el: SBType = mt.GetArrayElementType()
+        m_el_sz = m_el.GetByteSize()
+        m_el_el_sz = m_el.GetArrayElementType().GetByteSize()
+        self.rows = m_el_sz // m_el_el_sz
+        self.cols = m_sz // m_el_sz
+
+    def num_children(self):
+        return self.rows * self.cols
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]").removeprefix("m")
+        try:
+            row = int(name[0]) - 1
+            col = int(name[1]) - 1
+            return col + row * self.cols
+        except BaseException:
+            return
+
+    def get_child_at_index(self, idx: int):
+        if idx > self.rows * self.cols:
+            return
+        row = idx // self.cols
+        col = idx % self.cols
+
+        return (
+            self.m.GetChildAtIndex(col)
+            .GetChildAtIndex(row)
+            .Clone(f"[m{row + 1}{col + 1}]")
+        )
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self.m = self._valobj.GetChildMemberWithName("m")
+
+
+def QHostAddressSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    tgt: SBTarget = valobj.GetTarget()
+    proc: SBProcess = tgt.GetProcess()
+    d_addr = raw.Cast(
+        tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+    ).GetValueAsAddress()
+    err = SBError()
+    proto = proc.ReadUnsignedFromMemory(d_addr + 52, 1, err)
+    if err.Fail():
+        return err.description
+    if proto == 0 or proto == 2:
+        # IPv4
+        a = proc.ReadUnsignedFromMemory(d_addr + 48, 4, err)
+        if err.Fail():
+            return err.description
+        return f"{a >> 24}.{(a >> 16) & 0xFF}.{(a >> 8) & 0xFF}.{a & 0xFF}"
+    elif proto != 1:
+        return "(invalid)"
+
+    v0 = proc.ReadUnsignedFromMemory(d_addr + 32, 8, err)
+    if err.Fail():
+        return err.description
+    v1 = proc.ReadUnsignedFromMemory(d_addr + 32 + 8, 8, err)
+    if err.Fail():
+        return err.description
+
+    def to_ipv6_part(v: int):
+        return f"{v & 0xFF:02x}{(v >> 8) & 0xFF:02x}:{(v >> 16) & 0xFF:02x}{(v >> 24) & 0xFF:02x}:{(v >> 32) & 0xFF:02x}{(v >> 40) & 0xFF:02x}:{(v >> 48) & 0xFF:02x}{v >> 56:02x}"
+
+    return f"{to_ipv6_part(v0)}:{to_ipv6_part(v1)}"
+
+
+class QHostAddressSyntheticProvider:
+    NAME_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        tgt = self._valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._void_ptr = tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._proto_ty = tgt.FindFirstType("QAbstractSocket::NetworkLayerProtocol")
+        self._qstring_ty = tgt.FindFirstType("QString")
+        self._scope_id = None
+        self._proto = None
+
+    def num_children(self):
+        return 2
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        match name:
+            case "Protocol":
+                return 0
+            case "ScopeID":
+                return 1
+
+    def get_child_at_index(self, idx: int):
+        match idx:
+            case 0:
+                return self._proto
+            case 1:
+                return self._scope_id
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        d_addr = self._valobj.Cast(self._void_ptr).GetValueAsAddress()
+        self._scope_id = self._valobj.CreateValueFromAddress(
+            "[ScopeID]", d_addr + 8, self._qstring_ty
+        )
+        proto = self._process.ReadUnsignedFromMemory(d_addr + 52, 1, SBError())
+        vo = _valobj_from_signed(self._valobj, proto, "[Protocol]")
+        self._proto = vo.Cast(self._proto_ty)
+
+
+def QImageSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    if raw.GetChildMemberWithName("d").GetValueAsAddress() == 0:
+        return "(null)"
+    w = valobj.GetChildAtIndex(QImageSyntheticProvider.WIDTH_INDEX).GetValueAsSigned()
+    h = valobj.GetChildAtIndex(QImageSyntheticProvider.HEIGHT_INDEX).GetValueAsSigned()
+    return f"{w}x{h}"
+
+
+class QImageSyntheticProvider:
+    WIDTH_INDEX = 0
+    HEIGHT_INDEX = 1
+    FORMAT_INDEX = 2
+    DATA_INDEX = 3
+    N_BYTES_INDEX = 4
+    STRIDE_INDEX = 5
+    DPR_INDEX = 6
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target = self._valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._int = self._target.GetBasicType(lldb.eBasicTypeInt)
+        self._format_ty = self._target.FindFirstType("QImage::Format")
+        self._uchar_ptr = self._target.GetBasicType(
+            lldb.eBasicTypeUnsignedChar
+        ).GetPointerType()
+        self._priv_ty = self._target.FindFirstType("QImageData").GetPointerType()
+        self._has_priv = bool(self._priv_ty)
+        self._is_64bit = self._target.GetAddressByteSize() == 8
+
+        self._width = None
+        self._height = None
+        self._format = None
+        self._data = None
+        self._n_bytes = None
+        self._stride = None
+        self._dpr = None
+
+    def num_children(self):
+        return 7 if self._width else 0
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        match name:
+            case "Width":
+                return self.WIDTH_INDEX
+            case "Height":
+                return self.HEIGHT_INDEX
+            case "Format":
+                return self.FORMAT_INDEX
+            case "Data":
+                return self.DATA_INDEX
+            case "ByteSize":
+                return self.N_BYTES_INDEX
+            case "Stride":
+                return self.STRIDE_INDEX
+            case "DevicePixelRatio":
+                return self.DPR_INDEX
+
+    def get_child_at_index(self, idx: int):
+        match idx:
+            case self.WIDTH_INDEX:
+                return self._width
+            case self.HEIGHT_INDEX:
+                return self._height
+            case self.FORMAT_INDEX:
+                return self._format
+            case self.DATA_INDEX:
+                return self._data
+            case self.N_BYTES_INDEX:
+                return self._n_bytes
+            case self.STRIDE_INDEX:
+                return self._stride
+            case self.DPR_INDEX:
+                return self._dpr
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._width = None
+        self._height = None
+        self._format = None
+        self._data = None
+        self._n_bytes = None
+        self._stride = None
+        self._dpr = None
+
+        d = self._valobj.GetChildMemberWithName("d")
+        d_addr = d.GetValueAsAddress()
+        if d_addr == 0:
+            return  # null image
+        if self._has_priv:
+            d: SBValue = d.Cast(self._priv_ty)
+            self._width = d.GetChildMemberWithName("width").Clone("[Width]")
+            self._height = d.GetChildMemberWithName("height").Clone("[Height]")
+            self._n_bytes = d.GetChildMemberWithName("nbytes").Clone("[ByteSize]")
+            self._data = d.GetChildMemberWithName("data").Clone("[Data]")
+            self._format = d.GetChildMemberWithName("format").Clone("[Format]")
+            self._stride = d.GetChildMemberWithName("bytes_per_line").Clone("[Stride]")
+            self._dpr = d.GetChildMemberWithName("devicePixelRatio").Clone(
+                "[DevicePixelRatio]"
+            )
+        elif self._is_64bit:
+            width_off = 4  # offsetof(QImageData, width)
+            height_off = 8  # offsetof(QImageData, height)
+            nbytes_off = 16  # offsetof(QImageData, nbytes)
+            dpr_off = 24  # offsetof(QImageData, devicePixelRatio)
+            data_off = 56  # offsetof(QImageData, data)
+            format_off = 64  # offsetof(QImageData, format)
+            stride_off = 72  # offsetof(QImageData, bytes_per_line)
+
+            qsizetype = self._target.GetBasicType(lldb.eBasicTypeLongLong)
+            uchar_ptr = self._target.GetBasicType(
+                lldb.eBasicTypeUnsignedChar
+            ).GetPointerType()
+            self._width = self._valobj.CreateValueFromAddress(
+                "[Width]", d_addr + width_off, self._int
+            )
+            self._height = self._valobj.CreateValueFromAddress(
+                "[Height]", d_addr + height_off, self._int
+            )
+            self._n_bytes = self._valobj.CreateValueFromAddress(
+                "[ByteSize]",
+                d_addr + nbytes_off,
+                qsizetype,
+            )
+            self._dpr = self._valobj.CreateValueFromAddress(
+                "[DevicePixelRatio]",
+                d_addr + dpr_off,
+                self._target.GetBasicType(lldb.eBasicTypeDouble),
+            )
+            self._data = self._valobj.CreateValueFromAddress(
+                "[Data]",
+                d_addr + data_off,
+                uchar_ptr,
+            )
+            self._format = self._valobj.CreateValueFromAddress(
+                "[Format]", d_addr + format_off, self._format_ty
+            )
+            self._stride = self._valobj.CreateValueFromAddress(
+                "[Stride]", d_addr + stride_off, qsizetype
+            )
+
+
+def QObjectSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    v = valobj.GetChildAtIndex(QObjectSyntheticProvider.NAME_INDEX)
+    if not v:
+        return ""
+    return v.GetSummary()
+
+
+class QObjectSyntheticProvider:
+    PARENT_INDEX = 0
+    NAME_INDEX = 1
+    PROP_NAMES_INDEX = 2
+    PROP_VALUES_INDEX = 3
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target = self._valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._void_ptr = self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._qobj_ptr = self._valobj.GetType().GetPointerType()
+        self._qstr_ty = LazyType(self._target, "QString")
+        self._qbalist_ty = LazyType(self._target, "QList<QByteArray>")
+        self._qvlist_ty = LazyType(self._target, "QList<QVariant>")
+
+        self._qpriv = self._target.FindFirstType("QObjectPrivate")
+        self._has_priv = bool(self._qpriv)
+        self._ptr_size = self._target.GetAddressByteSize()
+
+        self._name = None
+        self._parent = None
+        self._prop_names = None
+        self._prop_values = None
+
+    def num_children(self):
+        return 5
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        match name:
+            case "Name":
+                return self.NAME_INDEX
+            case "Parent":
+                return self.PARENT_INDEX
+            case "PropertyNames":
+                return self.PROP_NAMES_INDEX
+            case "PropertyValues":
+                return self.PROP_VALUES_INDEX
+
+    def get_child_at_index(self, idx: int):
+        match idx:
+            case self.NAME_INDEX:
+                return self._name
+            case self.PARENT_INDEX:
+                return self._parent
+            case self.PROP_NAMES_INDEX:
+                return self._prop_names
+            case self.PROP_VALUES_INDEX:
+                return self._prop_values
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._name = None
+        self._parent = None
+        self._prop_names = None
+        self._prop_values = None
+
+        d_addr_addr = self._valobj.GetLoadAddress() + self._ptr_size  # skip vtable
+        err = SBError()
+        d_addr = self._process.ReadPointerFromMemory(d_addr_addr, err)
+        if err.Fail():
+            return
+        if d_addr == 0:
+            return
+
+        if self._has_priv:
+            d: SBValue = self._valobj.CreateValueFromAddress("", d_addr, self._qpriv)
+            # FIXME: Add children
+            self._parent = d.GetChildMemberWithName("parent").Clone("[Parent]")
+            ed: SBValue = d.GetChildMemberWithName("extraData")
+            if ed.GetValueAsAddress() != 0:
+                self._name = ed.GetChildMemberWithName("objectName").Clone("[Name]")
+                self._prop_names = ed.GetChildMemberWithName("propertyNames").Clone(
+                    "[PropertyNames]"
+                )
+                self._prop_values = ed.GetChildMemberWithName("propertyValues").Clone(
+                    "[PropertyValues]"
+                )
+            # pass
+        elif self._ptr_size == 8:
+            parent_off = 16  # offsetof(QObjectPrivate, parent)
+            # children_off = 24  # offsetof(QObjectPrivate, children)
+            ed_off = 80  # offsetof(QObjectPrivate, extraData)
+            obj_name_off = 96  # offsetof(QObjectPrivate::ExtraData, objectName)
+            prop_names_off = 0  # offsetof(QObjectPrivate::ExtraData, propertyNames)
+            prop_values_off = 24  # offsetof(QObjectPrivate::ExtraData, propertyValues)
+
+            self._parent = self._valobj.CreateValueFromAddress(
+                "[Parent]", d_addr + parent_off, self._qobj_ptr
+            )
+            ed_addr = self._process.ReadPointerFromMemory(d_addr + ed_off, err)
+            if err.Fail() or ed_addr == 0:
+                return
+            self._name = self._valobj.CreateValueFromAddress(
+                "[Name]", ed_addr + obj_name_off, self._qstr_ty()
+            )
+            self._prop_names = self._valobj.CreateValueFromAddress(
+                "[PropertyNames]", ed_addr + prop_names_off, self._qbalist_ty()
+            )
+            self._prop_values = self._valobj.CreateValueFromAddress(
+                "[PropertyValues]", ed_addr + prop_values_off, self._qvlist_ty()
+            )
+
+
+def QUrlSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    v = valobj.GetChildAtIndex(QUrlSyntheticProvider.COMBINED_INDEX)
+    if not v:
+        return "(null)"
+    return v.GetSummary()
+
+
+class QUrlSyntheticProvider:
+    SCHEME_INDEX = 0
+    USERNAME_INDEX = 1
+    PASS_INDEX = 2
+    HOST_INDEX = 3
+    PORT_INDEX = 4
+    PATH_INDEX = 5
+    QUERY_INDEX = 6
+    FRAGMENT_INDEX = 7
+    COMBINED_INDEX = (1 << 32) - 1
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target = self._valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._void_ptr = self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        self._qstring_ty = self._target.FindFirstType("QString")
+        self._ptr_size = self._target.GetAddressByteSize()
+
+        self._scheme = None
+        self._user = None
+        self._pass = None
+        self._host = None
+        self._port = None
+        self._path = None
+        self._query = None
+        self._fragment = None
+        self._combined = None
+
+    def num_children(self):
+        return 8
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        match name:
+            case "Scheme":
+                return self.SCHEME_INDEX
+            case "Username":
+                return self.USERNAME_INDEX
+            case "Password":
+                return self.PASS_INDEX
+            case "Host":
+                return self.HOST_INDEX
+            case "Port":
+                return self.PORT_INDEX
+            case "Path":
+                return self.PATH_INDEX
+            case "Query":
+                return self.QUERY_INDEX
+            case "Fragment":
+                return self.FRAGMENT_INDEX
+
+    def get_child_at_index(self, idx: int):
+        match idx:
+            case self.SCHEME_INDEX:
+                return self._scheme
+            case self.USERNAME_INDEX:
+                return self._user
+            case self.PASS_INDEX:
+                return self._pass
+            case self.HOST_INDEX:
+                return self._host
+            case self.PORT_INDEX:
+                return self._port
+            case self.PATH_INDEX:
+                return self._path
+            case self.QUERY_INDEX:
+                return self._query
+            case self.FRAGMENT_INDEX:
+                return self._fragment
+            case self.COMBINED_INDEX:
+                return self._combined
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._scheme = None
+        self._user = None
+        self._pass = None
+        self._host = None
+        self._port = None
+        self._path = None
+        self._query = None
+        self._fragment = None
+        self._combined = None
+
+        d_addr = self._valobj.GetChildMemberWithName("d").GetValueAsAddress()
+        if d_addr == 0:
+            return
+
+        self._port = self._valobj.CreateValueFromAddress(
+            "[Port]", d_addr + 4, self._target.GetBasicType(lldb.eBasicTypeInt)
+        )
+        port = self._port.GetValueAsSigned()
+        self._scheme = self._make_nth("[Scheme]", d_addr, 0)
+        scheme = self._str_at(d_addr, 0)
+        self._user = self._make_nth("[Username]", d_addr, 1)
+        user = self._str_at(d_addr, 1)
+        self._pass = self._make_nth("[Password]", d_addr, 2)
+        _pass = self._str_at(d_addr, 2)
+        self._host = self._make_nth("[Host]", d_addr, 3)
+        host = self._str_at(d_addr, 3)
+        self._path = self._make_nth("[Path]", d_addr, 4)
+        path = self._str_at(d_addr, 4)
+        self._query = self._make_nth("[Query]", d_addr, 5)
+        query = self._str_at(d_addr, 5)
+        self._fragment = self._make_nth("[Fragment]", d_addr, 6)
+        fragment = self._str_at(d_addr, 6)
+
+        flags = self._process.ReadUnsignedFromMemory(
+            d_addr + 2 * 4 + 7 * 3 * self._ptr_size + self._ptr_size + 1, 1, SBError()
+        )
+        if 2 * 4 + 7 * 3 * self._ptr_size + self._ptr_size + 1 != 185:
+            print("XXXXXXXX")
+
+        url = ""
+        if scheme:
+            url += scheme + ":"
+        has_authority = user or _pass or host or port >= 0
+        path_is_absolute = path.startswith("/")
+        is_local_file = (flags & 0x1) != 0
+        if has_authority:
+            url += "//"
+            if user or _pass:
+                url += user
+                if _pass:
+                    url += ":" + _pass
+                url += "@"
+            url += host
+            if port >= 0:
+                url += ":" + str(port)
+        elif path_is_absolute and is_local_file:
+            url += "//"
+
+        url += path
+        if query:
+            url += "?" + query
+        if fragment:
+            url += "#" + fragment
+
+        self._combined = _valobj_from_str(self._valobj, url)
+
+    def _make_nth(self, name: str, base: int, nth: int):
+        return self._valobj.CreateValueFromAddress(
+            name, base + 2 * 4 + nth * 3 * self._ptr_size, self._qstring_ty
+        )
+
+    def _str_at(self, base: int, nth: int) -> str:
+        # XXX: This changes in Qt7 - [ptr, size, d]; Qt6: [d, ptr, size]
+        err = SBError()
+        base_ptr = base + 2 * 4 + nth * 3 * self._ptr_size
+        sz = self._process.ReadUnsignedFromMemory(base_ptr + 2 * self._ptr_size, 8, err)
+        if sz == 0:
+            return ""
+        addr = self._process.ReadPointerFromMemory(base_ptr + self._ptr_size, err)
+        if addr == 0:
+            return ""
+        s: bytes = self._process.ReadMemory(addr, sz * 2, err)
+        try:
+            return s.decode("utf-16le")
+        except BaseException as _:
+            return ""
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:

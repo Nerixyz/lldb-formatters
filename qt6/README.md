@@ -7,9 +7,11 @@ Most of the formatters and the test files are based on the Nativs files from Qt
 
 All types are tested (see [`tests/`](./tests/)).
 
-- [ ] `QBasicAtomicInteger<*>`
-- [ ] `QBasicAtomicPointer<*>`
-- [ ] `QBasicAtomicPointer<void>`
+Types marked with 🧪 have improved formatting if debug info for private types is available.
+
+- [x] `QBasicAtomicInteger<*>`
+- [x] `QBasicAtomicPointer<*>`
+- [x] `QBasicAtomicPointer<void>`
 - [x] `QByteArray`
 - [ ] `QCborArray` 🟡 (only the JSON subset)
 - [ ] `QCborContainerPrivate` 🟡 (only the JSON subset)
@@ -19,43 +21,34 @@ All types are tested (see [`tests/`](./tests/)).
 - [x] `QChar`
 - [x] `QDate`
 - [x] `QDateTime`
-- [ ] `QDir`
-- [ ] `QFile`
-- [ ] `QFileInfo`
+- [x] `QDir` (🧪)
+- [x] `QFile` (🧪)
+- [x] `QFileInfo` (🧪)
 - [x] `QFlags<*>`
-- [ ] `QGenericMatrix<*,*,*>`
+- [x] `QGenericMatrix<*,*,*>` (`QMatrixNxM`)
 - [x] `QHash<*,*>`
-- [ ] `QHostAddress`
-- [ ] `QImage`
+- [x] `QHostAddress`
+- [x] `QImage`
 - [x] `QJsonArray`
 - [x] `QJsonDocument`
 - [x] `QJsonObject`
 - [x] `QJsonValue`
-- [ ] `QJsonValueConstRef`
-- [ ] `QJsonValueRef`
-- [ ] `QLine`
-- [ ] `QLineF`
+- [x] `QJsonValueConstRef`
+- [x] `QJsonValueRef`
+- [x] `QLine`
+- [x] `QLineF`
 - [x] `QList<*>`
 - [x] `QMap<*,*>`
-- [ ] `QMatrix2x2`
-- [ ] `QMatrix2x3`
-- [ ] `QMatrix2x4`
-- [ ] `QMatrix3x2`
-- [ ] `QMatrix3x3`
-- [ ] `QMatrix3x4`
-- [ ] `QMatrix4x2`
-- [ ] `QMatrix4x3`
-- [ ] `QMatrix4x4`
 - [x] `QMultiHash<*,*>`
-- [ ] `QMultiMap<*,*>`
-- [ ] `QObject`
-- [ ] `QPair<*,*>`
+- [x] `QMultiMap<*,*>`
+- [x] `QObject`
+- [x] ~~`QPair<*,*>`~~ That's just `std::pair`
 - [ ] `QPixmap`
 - [x] `QPoint`
 - [x] `QPointF`
-- [ ] `QPolygon`
-- [ ] `QPolygonF`
-- [ ] `QPropertyData<*>`
+- [x] `QPolygon`
+- [x] `QPolygonF`
+- [x] `QPropertyData<*>`
 - [ ] `QQuickItem`
 - [ ] `QQuickItemPrivate`
 - [x] `QRect`
@@ -63,18 +56,21 @@ All types are tested (see [`tests/`](./tests/)).
 - [x] `QSet<*>`
 - [x] `QSize`
 - [x] `QSizeF`
-- [ ] `QSizePolicy`
-- [ ] `QSpan<*>`
+- [x] `QSizePolicy`
+- [x] `QSpan<*>`
 - [ ] `QSpecialInteger<*>`
 - [x] `QString`
-- [ ] `QStringRef`
+- [ ] ~~`QStringRef`~~ Qt 5 type
 - [x] `QStringView`
 - [x] `QTime`
-- [ ] `QUrl`
+- [x] `QUrl`
 - [x] `QUuid`
 - [x] `QVarLengthArray<*,*>`
-- [ ] `QVariant`
+- [x] `QVariant`
+  > [!WARNING]
+  > While the primitive types like `int`, `QString`, or `QVariantMap` are supported, user-defined types that use templates might not work.
+  > The formatter looks up the type by the name embedded in the `QMetaType`. If that doesn't return any name, a `void*` is shown. Non-templates should work without problems.
 - [ ] `QVector2D`
 - [ ] `QVector3D`
 - [ ] `QVector4D`
-- [ ] `QVector<*>`
+- [ ] ~~`QVector<*>`~~ Qt 5 type (typedef to `QList`)

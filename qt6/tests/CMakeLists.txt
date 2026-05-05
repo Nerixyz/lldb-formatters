@@ -9,33 +9,54 @@ create_python_tests(
         Qt6::Core
         Qt6::Gui
         Qt6::Widgets
+        Qt6::Network
     SCRIPTS
         "${CMAKE_CURRENT_LIST_DIR}/../scripts/qt6.py"
     TESTS
+        QBasicAtomicInteger
+        QBasicAtomicPointer
         QByteArray
-        QHash
-        QCheckedInt
         QChar
+        QCheckedInt
         QDate
         QDateTime
+        QDir
+        QFile
+        QFileInfo
         QFlags
+        QGenericMatrix
+        QHash
+        QHostAddress
+        QImage
+        QJsonArray
+        QJsonDocument
+        QJsonObject
+        QJsonValue
+        QJsonValueConstRef
+        QJsonValueRef
+        QLine
+        QLineF
         QList
         QMap
         QMultiHash
+        QMultiMap
+        QObject
         QPoint
         QPointF
+        QPolygon
+        QPolygonF
         QRect
         QRectF
         QSet
         QSize
         QSizeF
-        QJsonArray
-        QJsonDocument
-        QJsonObject
-        QJsonValue
+        QSizePolicy
+        QSpan
         QString
         QStringView
         QTime
+        QUrl
         QUuid
+        QVariant
         QVarLengthArray
 )
