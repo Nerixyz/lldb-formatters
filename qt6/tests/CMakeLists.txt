@@ -27,6 +27,7 @@ create_python_tests(
         QGenericMatrix
         QHash
         QHostAddress
+        QImage
         QJsonArray
         QJsonDocument
         QJsonObject

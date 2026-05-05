@@ -28,7 +28,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [x] `QGenericMatrix<*,*,*>` (`QMatrixNxM`)
 - [x] `QHash<*,*>`
 - [x] `QHostAddress`
-- [ ] `QImage`
+- [x] `QImage`
 - [x] `QJsonArray`
 - [x] `QJsonDocument`
 - [x] `QJsonObject`

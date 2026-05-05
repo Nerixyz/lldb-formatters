@@ -75,6 +75,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QFile")
     add_summary("QFileInfo")
     add_summary("QHostAddress")
+    add_summary("QImage")
     add_summary("QGenericMatrix", regex="^QGenericMatrix<.*>$")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
@@ -138,6 +139,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("QFile")
     add_synthetic("QFileInfo")
     add_synthetic("QHostAddress")
+    add_synthetic("QImage")
 
 
 def _add_summary_string(
@@ -1923,6 +1925,154 @@ class QHostAddressSyntheticProvider:
         proto = self._process.ReadUnsignedFromMemory(d_addr + 52, 1, SBError())
         vo = _valobj_from_signed(self._valobj, proto, "[Protocol]")
         self._proto = vo.Cast(self._proto_ty)
+
+
+def QImageSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> str | None:
+    raw: SBValue = valobj.GetNonSyntheticValue()
+    if raw.GetChildMemberWithName("d").GetValueAsAddress() == 0:
+        return "(null)"
+    w = valobj.GetChildAtIndex(QImageSyntheticProvider.WIDTH_INDEX).GetValueAsSigned()
+    h = valobj.GetChildAtIndex(QImageSyntheticProvider.HEIGHT_INDEX).GetValueAsSigned()
+    return f"{w}x{h}"
+
+
+class QImageSyntheticProvider:
+    WIDTH_INDEX = 0
+    HEIGHT_INDEX = 1
+    FORMAT_INDEX = 2
+    DATA_INDEX = 3
+    N_BYTES_INDEX = 4
+    STRIDE_INDEX = 5
+    DPR_INDEX = 6
+
+    def __init__(self, valobj: SBValue, internal_dict):
+        self._valobj = valobj
+        self._target = self._valobj.GetTarget()
+        self._process: SBProcess = valobj.GetProcess()
+        self._int = self._target.GetBasicType(lldb.eBasicTypeInt)
+        self._format_ty = self._target.FindFirstType("QImage::Format")
+        self._uchar_ptr = self._target.GetBasicType(
+            lldb.eBasicTypeUnsignedChar
+        ).GetPointerType()
+        self._priv_ty = self._target.FindFirstType("QImageData").GetPointerType()
+        self._has_priv = bool(self._priv_ty)
+        self._is_64bit = self._target.GetAddressByteSize() == 8
+
+        self._width = None
+        self._height = None
+        self._format = None
+        self._data = None
+        self._n_bytes = None
+        self._stride = None
+        self._dpr = None
+
+    def num_children(self):
+        return 7 if self._width else 0
+
+    def get_child_index(self, name: str):
+        name = name.removeprefix("[").removesuffix("]")
+        match name:
+            case "Width":
+                return self.WIDTH_INDEX
+            case "Height":
+                return self.HEIGHT_INDEX
+            case "Format":
+                return self.FORMAT_INDEX
+            case "Data":
+                return self.DATA_INDEX
+            case "ByteSize":
+                return self.N_BYTES_INDEX
+            case "Stride":
+                return self.STRIDE_INDEX
+            case "DevicePixelRatio":
+                return self.DPR_INDEX
+
+    def get_child_at_index(self, idx: int):
+        match idx:
+            case self.WIDTH_INDEX:
+                return self._width
+            case self.HEIGHT_INDEX:
+                return self._height
+            case self.FORMAT_INDEX:
+                return self._format
+            case self.DATA_INDEX:
+                return self._data
+            case self.N_BYTES_INDEX:
+                return self._n_bytes
+            case self.STRIDE_INDEX:
+                return self._stride
+            case self.DPR_INDEX:
+                return self._dpr
+
+    def has_children(self):
+        return True
+
+    def update(self):
+        self._width = None
+        self._height = None
+        self._format = None
+        self._data = None
+        self._n_bytes = None
+        self._stride = None
+        self._dpr = None
+
+        d = self._valobj.GetChildMemberWithName("d")
+        d_addr = d.GetValueAsAddress()
+        if d_addr == 0:
+            return  # null image
+        if self._has_priv:
+            d: SBValue = d.Cast(self._priv_ty)
+            self._width = d.GetChildMemberWithName("width").Clone("[Width]")
+            self._height = d.GetChildMemberWithName("height").Clone("[Height]")
+            self._n_bytes = d.GetChildMemberWithName("nbytes").Clone("[ByteSize]")
+            self._data = d.GetChildMemberWithName("data").Clone("[Data]")
+            self._format = d.GetChildMemberWithName("format").Clone("[Format]")
+            self._stride = d.GetChildMemberWithName("bytes_per_line").Clone("[Stride]")
+            self._dpr = d.GetChildMemberWithName("devicePixelRatio").Clone(
+                "[DevicePixelRatio]"
+            )
+        elif self._is_64bit:
+            width_off = 4  # offsetof(QImageData, width)
+            height_off = 8  # offsetof(QImageData, height)
+            nbytes_off = 16  # offsetof(QImageData, nbytes)
+            dpr_off = 24  # offsetof(QImageData, devicePixelRatio)
+            data_off = 56  # offsetof(QImageData, data)
+            format_off = 64  # offsetof(QImageData, format)
+            stride_off = 72  # offsetof(QImageData, bytes_per_line)
+
+            qsizetype = self._target.GetBasicType(lldb.eBasicTypeLongLong)
+            uchar_ptr = self._target.GetBasicType(
+                lldb.eBasicTypeUnsignedChar
+            ).GetPointerType()
+            self._width = self._valobj.CreateValueFromAddress(
+                "[Width]", d_addr + width_off, self._int
+            )
+            self._height = self._valobj.CreateValueFromAddress(
+                "[Height]", d_addr + height_off, self._int
+            )
+            self._n_bytes = self._valobj.CreateValueFromAddress(
+                "[ByteSize]",
+                d_addr + nbytes_off,
+                qsizetype,
+            )
+            self._dpr = self._valobj.CreateValueFromAddress(
+                "[DevicePixelRatio]",
+                d_addr + dpr_off,
+                self._target.GetBasicType(lldb.eBasicTypeDouble),
+            )
+            self._data = self._valobj.CreateValueFromAddress(
+                "[Data]",
+                d_addr + data_off,
+                uchar_ptr,
+            )
+            self._format = self._valobj.CreateValueFromAddress(
+                "[Format]", d_addr + format_off, self._format_ty
+            )
+            self._stride = self._valobj.CreateValueFromAddress(
+                "[Stride]", d_addr + stride_off, qsizetype
+            )
 
 
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:
