@@ -56,6 +56,11 @@ jobs:
         with:
           python-version: "3.11" # Matches the python used in LLDB
 
+      - name: Install conan
+        run: |
+          pip install conan
+          conan profile detect -f
+
       - name: Configure
         run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
 

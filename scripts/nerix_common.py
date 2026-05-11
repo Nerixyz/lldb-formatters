@@ -1,5 +1,6 @@
 from typing import Callable
-from lldb import SBDebugger, SBValue
+import lldb
+from lldb import SBDebugger, SBValue, SBTarget, SBType
 
 
 def make_add_summary_string(dbg: SBDebugger, category: str):
@@ -19,11 +20,11 @@ def make_add_summary_string(dbg: SBDebugger, category: str):
     return add_summary_string
 
 
-def make_add_summary(dbg: SBDebugger, category: str, modname: str):
+def make_add_summary(dbg: SBDebugger, category: str, modname: str, *, include_own=True):
     def add_summary(
         type_name: str, *, regex: str | None = None, other_names: list[str] = []
     ):
-        type_names = other_names + [type_name]
+        type_names = other_names + ([type_name] if include_own else [])
         cmd = f"type summary add -w {category} -F {modname}.{type_name}SummaryProvider "
         if regex:
             cmd += f' -x "{regex}"'
@@ -138,7 +139,9 @@ class ArraySyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._backend = valobj
         self._size = 0
-        self._val: SBValue | None = None
+        self._base_addr = 0
+        self._resolved_type = None
+        self._offset = 0
 
     def num_children(self):
         return self._size
@@ -147,24 +150,47 @@ class ArraySyntheticProvider:
         return numeric_index(name)
 
     def get_child_at_index(self, idx: int):
-        if idx < 0 or idx >= self._size or not self._val:
+        if idx < 0 or idx >= self._size or self._resolved_type is None:
             return None
-        return self._val.GetChildAtIndex(idx).Clone(f"[{idx}]")
+        return self._backend.CreateValueFromAddress(
+            f"[{idx}]", self._base_addr + self._offset * idx, self._resolved_type
+        )
 
     def has_children(self):
-        return self._val is not None
+        return self._base_addr != 0 and self._base_addr != lldb.LLDB_INVALID_ADDRESS
 
     def update(self):
         ptr, size = self._pointer_and_size(self._backend)
         self._size = size
-        array_type = self._array_type(ptr).GetArrayType(self._size)
-        if ptr.TypeIsPointerType():
-            ptr = ptr.Dereference()
-        self._val = ptr.Cast(array_type)
+        if isinstance(ptr, int):
+            self._resolved_type = self._array_type(SBValue())
+            self._base_addr = ptr
+        else:
+            self._resolved_type = self._array_type(ptr)
+            if ptr.TypeIsPointerType():
+                self._base_addr = ptr.GetValueAsAddress()
+            else:
+                self._base_addr = ptr.GetLoadAddress()
+        self._offset = self._resolved_type.GetByteSize()
         return False
 
-    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue, int]:
+    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue | int, int]:
         raise NotImplementedError()
 
-    def _array_type(self, valobj: SBValue):
+    def _array_type(self, valobj: SBValue) -> SBType:
         raise NotImplementedError()
+
+
+class LazyType:
+    def __init__(self, tgt: SBTarget, names: str | tuple[str, ...]):
+        self.tgt = tgt
+        self.names = (names,) if isinstance(names, str) else names
+        self.ty = None
+
+    def __call__(self) -> SBType:
+        if self.ty is None:
+            for n in self.names:
+                self.ty = self.tgt.FindFirstType(n)
+                if self.ty:
+                    break
+        return self.ty  # type: ignore
