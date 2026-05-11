@@ -12,5 +12,6 @@ if(BUILD_TESTING)
     include(LLDBTesting)
 endif()
 
+add_subdirectory(boost-json)
 add_subdirectory(qt6)
 add_subdirectory(sol2-lua)
