@@ -14,4 +14,8 @@ endif()
 
 add_subdirectory(boost-json)
 add_subdirectory(qt6)
+add_subdirectory(rapidjson)
 add_subdirectory(sol2-lua)
+
+include(FeatureSummary)
+feature_summary(WHAT ALL)

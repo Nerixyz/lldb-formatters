@@ -7,3 +7,6 @@
 [submodule "third-party/cmake-conan"]
 	path = third-party/cmake-conan
 	url = https://github.com/conan-io/cmake-conan
+[submodule "third-party/rapidjson"]
+	path = third-party/rapidjson
+	url = https://github.com/Tencent/rapidjson.git
