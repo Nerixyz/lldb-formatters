@@ -86,4 +86,11 @@ TODO
 
 ### Rapidjson
 
-TODO
+- **Directory**: [`rapidjson`](./rapidjson)
+- **Available Types**:
+  - [x] `rapidjson::GenericValue<*>`
+
+- **Install**:
+  ```sh
+  command script import <path-to>/rapidjson/scripts/rapidjson.py
+  ```
