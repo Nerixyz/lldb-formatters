@@ -69,7 +69,7 @@ class CachedGeneratorProvider:
         self._size = 0
         self._cached: list[SBValue] = []
 
-    def _make_generator(self) -> typing.Generator[SBValue]:
+    def _make_generator(self) -> typing.Generator[SBValue, None, None]:
         raise NotImplementedError()
 
     def get_child_index(self, name: str):
