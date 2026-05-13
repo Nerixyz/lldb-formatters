@@ -12,6 +12,7 @@ if(BUILD_TESTING)
     include(LLDBTesting)
 endif()
 
+add_subdirectory(boost-circular-buffer)
 add_subdirectory(boost-json)
 add_subdirectory(boost-unordered)
 add_subdirectory(qt6)

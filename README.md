@@ -94,6 +94,19 @@ Both Lua and sol2 share the same Python file.
   command script import <path-to>/boost-json/scripts/boost_json.py
   ```
 
+### Boost.CircularBuffer
+
+- **Directory**: [`boost-circular-buffer`](./boost-circular-buffer)
+- **Available Types**:
+  - [x] `boost::circular_buffer`
+  - [x] `boost::circular_buffer_space_optimized`
+  - [x] Iterators
+
+- **Install**:
+  ```sh
+  command script import <path-to>/boost-circular-buffer/scripts/boost_circular_buffer.py
+  ```
+
 ### Rapidjson
 
 - **Directory**: [`rapidjson`](./rapidjson)
