@@ -13,6 +13,7 @@ if(BUILD_TESTING)
 endif()
 
 add_subdirectory(boost-json)
+add_subdirectory(boost-unordered)
 add_subdirectory(qt6)
 add_subdirectory(rapidjson)
 add_subdirectory(sol2-lua)

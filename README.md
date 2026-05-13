@@ -67,7 +67,17 @@ Both Lua and sol2 share the same Python file.
 
 ### Boost.Unordered
 
-TODO
+- **Directory**: [`boost-unordered`](./boost-unordered)
+- **Available Types**:
+  - [x] `boost::unordered::unordered_(multi)(map|set)`
+  - [x] `boost::unordered::unordered_(node|flat)_(map|set)`
+  - [x] `boost::unordered::concurrent_(node|flat)_(map|set)`
+  - [x] Map/Set iterators
+
+- **Install**:
+  ```sh
+  command script import <path-to>/boost-unordered/scripts/boost_unordered.py
+  ```
 
 ### Boost.Json
 
