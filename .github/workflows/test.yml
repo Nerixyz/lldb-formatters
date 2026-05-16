@@ -74,12 +74,14 @@ jobs:
       - name: 🐧 Use GCC
         if: runner.os == 'Linux' && matrix.compiler == 'gcc'
         run: |
+          which lldb-server-22.1.6
           echo "CC=gcc" >> "$GITHUB_ENV"
           echo "CXX=g++" >> "$GITHUB_ENV"
 
       - name: 🐧 Use Clang
         if: runner.os == 'Linux' && matrix.compiler == 'clang'
         run: |
+          which lldb-server-22.1.6
           sudo apt install -y --no-install-recommends clang
           echo "CC=clang" >> "$GITHUB_ENV"
           echo "CXX=clang++" >> "$GITHUB_ENV"
@@ -130,7 +132,7 @@ jobs:
         run: ninja -C build
 
       - name: Setup tmate session
-        if: runner.os == 'macOS' && failure()
+        if: runner.os == 'Linux' && failure()
         uses: mxschmitt/action-tmate@v3
 
       - name: Test
