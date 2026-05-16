@@ -65,6 +65,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/lldb-server lldb-server /usr/bin/lldb-server-22 10
           lldb --version
           which lldb-server
+          readlink -f /usr/bin/lldb-server-22
           which python3
           python3 --version
           PYTHONPATH=`lldb -P` python3 -c 'import lldb'

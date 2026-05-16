@@ -887,6 +887,7 @@ class QDateTimeSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
         self._date = None
+        self._is_local = False
 
     def update(self):
         data = _qdatetime_data(self._valobj)
