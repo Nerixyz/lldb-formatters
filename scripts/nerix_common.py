@@ -95,7 +95,7 @@ class ExpandingSyntheticProvider:
 
 
 class DispatchedSynthetic:
-    items: list[tuple[str, Callable | str]] = []
+    items: list[tuple[str, Union[Callable, str]]] = []
 
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
@@ -175,7 +175,7 @@ class ArraySyntheticProvider:
         self._offset = self._resolved_type.GetByteSize()
         return False
 
-    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue | int, int]:
+    def _pointer_and_size(self, valobj: SBValue) -> tuple[Union[SBValue, int], int]:
         raise NotImplementedError()
 
     def _array_type(self, valobj: SBValue) -> SBType:
@@ -183,7 +183,7 @@ class ArraySyntheticProvider:
 
 
 class LazyType:
-    def __init__(self, tgt: SBTarget, names: str | tuple[str, ...]):
+    def __init__(self, tgt: SBTarget, names: Union[str, tuple[str, ...]]):
         self.tgt = tgt
         self.names = (names,) if isinstance(names, str) else names
         self.ty = None
