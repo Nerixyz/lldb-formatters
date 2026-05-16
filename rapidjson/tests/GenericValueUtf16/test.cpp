@@ -9,8 +9,8 @@ int main()
     Value empty;
     Value vInt(1234);
     Value vUint(1234u);
-    Value vInt64(1234LL);
-    Value vUint64(1234ULL);
+    Value vInt64(static_cast<int64_t>(1234));
+    Value vUint64(static_cast<uint64_t>(1234));
     Value vDouble(1.25);
     Value vTrue(true);
     Value vFalse(false);
@@ -19,8 +19,8 @@ int main()
 
     Value vArray(rapidjson::kArrayType);
     vArray.PushBack(rapidjson::kNullType, alloc);
-    vArray.PushBack(1234, alloc);
-    vArray.PushBack(1234u, alloc);
+    vArray.PushBack(static_cast<int64_t>(1234), alloc);
+    vArray.PushBack(static_cast<uint64_t>(1234), alloc);
     vArray.PushBack(-1234, alloc);
     vArray.PushBack(true, alloc);
     vArray.PushBack(false, alloc);
@@ -41,8 +41,8 @@ int main()
     vObject.AddMember(u"int", 123, alloc);
     vObject.AddMember(u"null", rapidjson::kNullType, alloc);
     vObject.AddMember(u"uint", 456u, alloc);
-    vObject.AddMember(u"int64", 123LL, alloc);
-    vObject.AddMember(u"uint64", 123ULL, alloc);
+    vObject.AddMember(u"int64", static_cast<int64_t>(123), alloc);
+    vObject.AddMember(u"uint64", static_cast<uint64_t>(123), alloc);
     vObject.AddMember(u"double", 1.25, alloc);
     vObject.AddMember(u"true", true, alloc);
     vObject.AddMember(u"false", false, alloc);

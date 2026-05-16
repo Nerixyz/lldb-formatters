@@ -103,6 +103,10 @@ jobs:
       - name: Build
         run: ninja -C build
 
+      - name: Setup tmate session
+        if: runner.os == 'macOS'
+        uses: mxschmitt/action-tmate@v3
+
       - name: Test
         working-directory: build
         run: ctest -j2 --output-on-failure
