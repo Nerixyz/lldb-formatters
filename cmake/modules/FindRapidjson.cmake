@@ -2,9 +2,9 @@ include(FindPackageHandleStandardArgs)
 
 set(_rapidjson_include_dir "${CMAKE_SOURCE_DIR}/third-party/rapidjson/include")
 
-find_package_handle_standard_args(rapidjson DEFAULT_MSG _rapidjson_include_dir)
+find_package_handle_standard_args(Rapidjson DEFAULT_MSG _rapidjson_include_dir)
 
-if (rapidjson_FOUND)
+if (Rapidjson_FOUND)
     add_library(rapidjson INTERFACE IMPORTED)
     set_target_properties(rapidjson PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${_rapidjson_include_dir}"
