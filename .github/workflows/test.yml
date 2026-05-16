@@ -66,6 +66,7 @@ jobs:
           lldb --version
           which lldb-server
           readlink -f /usr/bin/lldb-server-22
+          echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
           which python3
           python3 --version
           PYTHONPATH=`lldb -P` python3 -c 'import lldb'
