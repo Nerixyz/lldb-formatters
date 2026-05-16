@@ -1,5 +1,9 @@
+import traceback
+
 import lldb
 from lldb import (
+    SBFrame,
+    SBFrameList,
     SBValue,
     SBType,
     SBTarget,
@@ -7,7 +11,11 @@ from lldb import (
     SBError,
     SBDebugger,
     LLDB_INVALID_ADDRESS,
+    SBValueList,
+    SBVariablesOptions,
 )
+from lldb.plugins.scripted_frame_provider import ScriptedFrameProvider
+from lldb.plugins.scripted_process import ScriptedFrame
 from nerix_common import (
     ArraySyntheticProvider,
     make_add_summary,
@@ -18,6 +26,7 @@ from nerix_common import (
     DispatchedSynthetic,
 )
 import lua_constants
+from lua_constants import OpCode
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
@@ -44,6 +53,364 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_synthetic("SolBasicReference", regex=any_ref_re)
     add_summary_string("sol::variadic_args", "size=${svar%#}")
     add_summary("SolBasicReference", regex=any_ref_re)
+
+    if dbg.GetNumTargets() > 0:
+        dbg.HandleCommand("target frame-provider clear")
+        dbg.HandleCommand(
+            f"target frame-provider register -C {__name__}.LuaFrameProvider"
+        )
+
+
+class LuaFrameProvider(ScriptedFrameProvider):
+    def __init__(self, input_frames: SBFrameList, args):
+        super().__init__(input_frames, args)
+        self._resolved_frames: list[int | LuaFrame] | None = None
+
+    @staticmethod
+    def get_description():
+        return "Show each frame twice"
+
+    @staticmethod
+    def applies_to_thread(thread):
+        return True
+
+    def get_frame_at_index(self, index):
+        if self._resolved_frames is not None:
+            if index < len(self._resolved_frames):
+                return self._resolved_frames[index]
+            return index
+        # return index // 2
+        if self.input_frames is None:
+            return index
+        f = self.input_frames.GetFrameAtIndex(index)
+        n = f.GetFunction().GetMangledName()
+        # FIXME: just MS mangling right now
+        if n == "?luaV_execute@@YAXPEAUlua_State@@PEAUCallInfo@@@Z":
+            self._resolve_frames(index)
+            return self.get_frame_at_index(index)
+        return index
+
+    def _generate_frames(self, from_idx: int):
+        assert self.input_frames is not None
+        for index in range(from_idx, len(self.input_frames)):
+            f = self.input_frames.GetFrameAtIndex(index)
+            yield index
+            n = f.GetFunction().GetMangledName()
+            if n != "?luaV_execute@@YAXPEAUlua_State@@PEAUCallInfo@@@Z":
+                continue
+
+            ci = f.FindVariable("ci")
+            while _not_nullptr(ci):
+                func_closure = (
+                    ci.GetChildMemberWithName("func")
+                    .GetChildMemberWithName("p")
+                    .GetChildMemberWithName("val")
+                    .GetSyntheticValue()
+                )
+                if not func_closure:
+                    break
+                src = _get_sourcename(func_closure)
+                if src is None:
+                    break  # C function - should be in call stack before
+                line = _try_get_line(ci, func_closure)
+                yield LuaFrame(self.thread, ci, func_closure, src, line)
+                ci = ci.GetChildMemberWithName("previous")
+
+    def _resolve_frames(self, from_idx: int):
+        assert self.input_frames is not None
+        self._resolved_frames = [i for i in range(from_idx)]
+        try:
+            for f in self._generate_frames(from_idx):
+                self._resolved_frames.append(f)
+        except BaseException:
+            print(traceback.format_exc())
+
+
+def _try_get_line(ci: SBValue, closure: SBValue):
+    res = _proto_and_pc(ci, closure)
+    if res is None:
+        return 0
+    proto, pc = res
+    lineinfo = proto.GetChildMemberWithName("lineinfo").GetValueAsAddress()
+    if lineinfo == 0 or lineinfo == LLDB_INVALID_ADDRESS:
+        return 0
+    code_start = proto.GetChildMemberWithName("code").GetValueAsAddress()
+    # pc and code_start are `uint32_t*`
+    pc = (pc - code_start) // 4 - 1
+    start_pc, baseline = _get_base_line(proto, pc)
+
+    process = proto.GetProcess()
+    err = SBError()
+
+    def get_offset(i: int):
+        return process.ReadUnsignedFromMemory(lineinfo + i, 1, err)
+
+    while start_pc < pc:
+        start_pc += 1
+        baseline += get_offset(start_pc)
+    return baseline
+
+
+def _get_base_line(proto: SBValue, pc: int):
+    sz_abslineinfo = proto.GetChildMemberWithName(
+        "sizeabslineinfo"
+    ).GetValueAsUnsigned()
+    abslineinfo_base = proto.GetChildMemberWithName("abslineinfo").GetValueAsAddress()
+    if sz_abslineinfo == 0:
+        return -1, proto.GetChildMemberWithName("linedefined").GetValueAsUnsigned()
+    process = proto.GetProcess()
+    err = SBError()
+
+    def get_pc(i: int):
+        return process.ReadUnsignedFromMemory(abslineinfo_base + i * 8, 4, err)
+
+    if pc < get_pc(0):
+        return -1, proto.GetChildMemberWithName("linedefined").GetValueAsUnsigned()
+
+    i = pc // 128 - 1
+    cur_pc = 0
+    while i + 1 < sz_abslineinfo:
+        next_pc = get_pc(i + 1)
+        if pc > next_pc:
+            break
+        i += 1
+        cur_pc = next_pc
+    # pc + line
+    return cur_pc, process.ReadUnsignedFromMemory(abslineinfo_base + i * 8 + 4, 4, err)
+
+
+def _not_nullptr(v: SBValue):
+    addr = v.GetValueAsAddress()
+    return addr != 0 and addr != LLDB_INVALID_ADDRESS
+
+
+def _get_sourcename(closure: SBValue):
+    tt = _tt_val(closure.GetNonSyntheticValue().GetChildMemberWithName("tt_"))
+    if tt != lua_constants.LUA_VLCL:
+        return None
+    proto = closure.GetChildMemberWithName("p")
+    src = read_tstring(proto.GetChildMemberWithName("source"))
+    if src.startswith("@"):
+        # filename
+        src = src.removeprefix("@").replace("\\", "/").rsplit("/", 1)[1]
+        if len(src) < 25:
+            return src
+        return "[...]" + src[:-20]
+    if src.startswith("="):
+        src = src.removeprefix("=")
+    src = src.strip()
+    if len(src) < 25:
+        return f'"{src}"'
+    return f'"{src[:20]}..."'
+
+
+# FIXME: This is unused right now.
+# Getting the name of the function is a bit more involved.
+# We need to interpret the bytecode to get the name.
+def _get_funcname(L: SBValue, ci: SBValue):
+    """ldebug.c, getfuncname(L, ci, name)"""
+    cist = ci.GetChildMemberWithName("callstatus").GetValueAsUnsigned()
+    if cist & lua_constants.CIST_TAIL:
+        return "(tail call)"
+    ci = ci.GetChildMemberWithName("previous")
+    if ci.GetValueAsAddress() == 0:
+        return "(?)"
+    cist = ci.GetChildMemberWithName("callstatus").GetValueAsUnsigned()
+    if cist & lua_constants.CIST_HOOKED:
+        return "(hooked)"
+    if cist & lua_constants.CIST_FIN:
+        return "__gc"
+    if cist & lua_constants.CIST_C:
+        return "(C)"
+
+    ret = _proto_and_pc(ci)
+    if ret is None:
+        return "(unknown pc)"
+    proto, pc = ret
+
+    code_start = proto.GetChildMemberWithName("code").GetValueAsAddress()
+    # pc and code_start are `uint32_t*`
+    rel_pc = (pc - code_start) // 4 - 1
+    if rel_pc < 0:
+        return "(invalid pc)"
+
+    process = ci.GetProcess()
+    err = SBError()
+    insn = process.ReadUnsignedFromMemory(code_start + rel_pc * 4, 4, err)
+    if err.Fail():
+        return "(failed to read insn)"
+    match _get_opcode(insn):
+        case OpCode.OP_CALL | OpCode.OP_TAILCALL:
+            pass
+        case OpCode.OP_TFORCALL:
+            return "for iterator"
+        case (
+            OpCode.OP_SELF
+            | OpCode.OP_GETTABUP
+            | OpCode.OP_GETTABLE
+            | OpCode.OP_GETI
+            | OpCode.OP_GETFIELD
+        ):
+            return "__index"
+        case (
+            OpCode.OP_SETTABUP
+            | OpCode.OP_SETTABLE
+            | OpCode.OP_SETI
+            | OpCode.OP_SETFIELD
+        ):
+            return "__newindex"
+        case OpCode.OP_MMBIN | OpCode.OP_MMBINI | OpCode.OP_MMBINK:
+            c = _get_argc(insn)
+            if c < 0 or c >= 25:
+                return "(invalid tm)"
+            L = L.GetNonSyntheticValue()
+            s = (
+                L.GetChildMemberWithName("l_G")
+                .GetChildMemberWithName("tmname")
+                .GetChildAtIndex(c)
+                .GetSummary()
+            )
+            if not s:
+                return "(unavailable tm)"
+            return s.removeprefix('"').removesuffix('"')
+        case OpCode.OP_UNM:
+            return "__unm"
+        case OpCode.OP_BNOT:
+            return "__bnot"
+        case OpCode.OP_LEN:
+            return "__len"
+        case OpCode.OP_CONCAT:
+            return "__concat"
+        case OpCode.OP_EQ:
+            return "__eq"
+        case OpCode.OP_LT | OpCode.OP_LTI | OpCode.OP_GTI:
+            return "__lt"
+        case OpCode.OP_LE | OpCode.OP_LEI | OpCode.OP_GEI:
+            return "__le"
+        case OpCode.OP_CLOSE | OpCode.OP_RETURN:
+            return "__close"
+        case x:
+            return "(invalid opcode: {x:#x})"
+
+
+def _get_opcode(insn: int):
+    return insn & 0b0111_1111
+
+
+def _get_arga(insn: int):
+    return (insn >> (7)) & 0xFF
+
+
+def _get_argc(insn: int):
+    return (insn >> (7 + 8 + 8)) & 0xFF
+
+
+def _proto_and_pc(ci: SBValue, closure: SBValue | None = None):
+    if closure is None:
+        closure = (
+            ci.GetChildMemberWithName("func")
+            .GetChildMemberWithName("p")
+            .GetChildMemberWithName("val")
+            .GetSyntheticValue()
+        )
+
+    pc = (
+        ci.GetChildMemberWithName("u")
+        .GetChildMemberWithName("l")
+        .GetChildMemberWithName("savedpc")
+        .GetValueAsAddress()
+    )
+    proto = closure.GetChildMemberWithName("p")
+    if not proto or pc == lldb.LLDB_INVALID_ADDRESS:
+        return None
+    return proto, pc
+
+
+def read_tstring(tstr: SBValue):
+    tstr = tstr.GetNonSyntheticValue()
+    len = tstr.GetChildMemberWithName("shrlen").GetValueAsUnsigned()
+    if len == 0xFF:
+        len = (
+            tstr.GetChildMemberWithName("u")
+            .GetChildMemberWithName("lnglen")
+            .GetValueAsUnsigned()
+        )
+    if len == 0:
+        return ""
+    ptr = tstr.GetChildMemberWithName("contents").GetLoadAddress()
+    err = SBError()
+    res = tstr.GetProcess().ReadMemory(ptr, len, err)
+    if res is None or err.Fail():
+        return ""
+    return res.decode()
+
+
+class LuaFrame(ScriptedFrame):
+    def __init__(self, thread, ci: SBValue, closure: SBValue, name: str, line: int):
+        args = lldb.SBStructuredData()
+        super().__init__(thread, args)
+        self.id = ci.GetAddress()
+        self.ci = ci
+        self.name = f"[Lua] {name}"
+        if line != 0:
+            self.name += f":{line}"
+        self.closure = closure
+        self._var_cache = None
+
+    def get_id(self):
+        return self.id
+
+    def get_pc(self):
+        return None
+
+    def get_function_name(self):
+        return self.name
+
+    def is_artificial(self):
+        return True
+
+    def is_hidden(self):
+        return False
+
+    def get_register_context(self):
+        return None
+
+    def get_variables(self, *args):
+        if self._var_cache is None:
+            self._var_cache = self._get_vars_impl()
+        return self._var_cache
+
+    def _get_vars_impl(self):
+        vars = SBValueList()
+        pp = _proto_and_pc(self.ci, self.closure)
+        if pp is None:
+            return vars
+        proto, pc = pp
+        code_start = proto.GetChildMemberWithName("code").GetValueAsAddress()
+        # pc and code_start are `uint32_t*`
+        pc = (pc - code_start) // 4 - 1
+        if pc < 0:
+            return vars
+        sz_locals = proto.GetChildMemberWithName("sizelocvars").GetValueAsUnsigned()
+        locvars = proto.GetChildMemberWithName("locvars")
+        stack_base = self.ci.GetChildMemberWithName("func").GetChildMemberWithName("p")
+        stk_id_ty = stack_base.GetType().GetPointeeType()
+        loc_ty = locvars.GetType().GetPointeeType()
+        for i in range(sz_locals):
+            local = locvars.CreateChildAtOffset("", i * loc_ty.GetByteSize(), loc_ty)
+            startpc = local.GetChildMemberWithName("startpc").GetValueAsUnsigned()
+            if startpc > pc:
+                break
+            endpc = local.GetChildMemberWithName("endpc").GetValueAsUnsigned()
+            if pc < endpc:
+                name = read_tstring(local.GetChildMemberWithName("varname"))
+                if not name:
+                    name = f"(unnamed local {i})"
+                var = stack_base.CreateChildAtOffset(
+                    "", (i + 1) * stk_id_ty.GetByteSize(), stk_id_ty
+                ).GetChildMemberWithName("val")
+                vars.Append(var.Clone(name))
+        return vars
 
 
 def _tt_val(v: SBValue):
@@ -321,7 +688,7 @@ class LuaStateSyntheticProvider:
         self._stack_begin: SBValue | None = None
         self._global_state = None
         self._ty_tvalue = valobj.GetTarget().FindFirstType("TValue")
-        ty_stack_value: SBValue = valobj.GetTarget().FindFirstType("StackValue")
+        ty_stack_value = valobj.GetTarget().FindFirstType("StackValue")
         self._stack_value_size = ty_stack_value.GetByteSize()
 
     def num_children(self):

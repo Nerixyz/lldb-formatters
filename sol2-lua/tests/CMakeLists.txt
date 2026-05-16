@@ -12,4 +12,5 @@ create_python_tests(
         "${CMAKE_CURRENT_LIST_DIR}/../scripts/lua.py"
     TESTS
         basic_reference
+        frame_rec
 )
