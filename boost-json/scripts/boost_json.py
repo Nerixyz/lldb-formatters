@@ -131,23 +131,23 @@ class Kind:
         k = tgt.FindFirstType("boost::json::kind").GetEnumMembers()
         for it in k:
             v = it.GetValueAsUnsigned()
-            match it.GetName():
-                case "null":
-                    Kind.Null = v
-                case "bool_":
-                    Kind.Bool = v
-                case "int64":
-                    Kind.Int64 = v
-                case "uint64":
-                    Kind.Uint64 = v
-                case "double_":
-                    Kind.Double = v
-                case "string":
-                    Kind.String = v
-                case "array":
-                    Kind.Array = v
-                case "object":
-                    Kind.Object = v
+            name = it.GetName()
+            if name == "null":
+                Kind.Null = v
+            elif name == "bool_":
+                Kind.Bool = v
+            elif name == "int64":
+                Kind.Int64 = v
+            elif name == "uint64":
+                Kind.Uint64 = v
+            elif name == "double_":
+                Kind.Double = v
+            elif name == "string":
+                Kind.String = v
+            elif name == "array":
+                Kind.Array = v
+            elif name == "object":
+                Kind.Object = v
 
 
 def ValueSummaryProvider(
@@ -178,23 +178,23 @@ class ValueSyntheticProvider(ExpandingSyntheticProvider):
         u: SBValue = valobj.GetChildAtIndex(0)
         sca: SBValue = u.GetChildMemberWithName("sca_")
         kind = sca.GetChildMemberWithName("k").GetValueAsUnsigned()
-        match kind & 0xF:
-            case Kind.Null:
-                return None
-            case Kind.Bool:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("b")
-            case Kind.Int64:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("i")
-            case Kind.Uint64:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("u")
-            case Kind.Double:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("d")
-            case Kind.String:
-                return u.GetChildMemberWithName("str_")
-            case Kind.Array:
-                return u.GetChildMemberWithName("arr_").GetSyntheticValue()
-            case Kind.Object:
-                return u.GetChildMemberWithName("obj_").GetSyntheticValue()
+        kind_tag = kind & 0xF
+        if kind_tag == Kind.Null:
+            return None
+        elif kind_tag == Kind.Bool:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("b")
+        elif kind_tag == Kind.Int64:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("i")
+        elif kind_tag == Kind.Uint64:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("u")
+        elif kind_tag == Kind.Double:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("d")
+        elif kind_tag == Kind.String:
+            return u.GetChildMemberWithName("str_")
+        elif kind_tag == Kind.Array:
+            return u.GetChildMemberWithName("arr_").GetSyntheticValue()
+        elif kind_tag == Kind.Object:
+            return u.GetChildMemberWithName("obj_").GetSyntheticValue()
 
     def get_value(self):
         return self._val

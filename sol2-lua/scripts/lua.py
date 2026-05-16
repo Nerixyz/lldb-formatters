@@ -56,17 +56,16 @@ def TValueSummaryProvider(
 ) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     tt = _tt_val(raw.GetChildMemberWithName("tt_"))
-    match tt:
-        case (
-            lua_constants.LUA_VNUMFLT
-            | lua_constants.LUA_VNUMINT
-            | lua_constants.LUA_VLCF
-        ):
-            return ""
-        case lua_constants.LUA_VLIGHTUSERDATA:
-            return "lightuserdata"
-        case _:
-            return _value_summary(raw.GetChildMemberWithName("value_"), tt)
+    if (
+        tt == lua_constants.LUA_VNUMFLT
+        or tt == lua_constants.LUA_VNUMINT
+        or tt == lua_constants.LUA_VLCF
+    ):
+        return ""
+    elif tt == lua_constants.LUA_VLIGHTUSERDATA:
+        return "lightuserdata"
+    else:
+        return _value_summary(raw.GetChildMemberWithName("value_"), tt)
 
 
 def TStringSummaryProvider(
@@ -244,37 +243,36 @@ class TValueSyntheticProvider:
         self._named_children = []
         self._metatable = None
         val_union = self._valobj.GetChildMemberWithName("value_")
-        match tt:
-            case lua_constants.LUA_VTHREAD:
-                self._expand = self._get_gco(val_union, "lua_State")
-            case lua_constants.LUA_VNUMINT:
-                self._value = val_union.GetChildMemberWithName("i")
-            case lua_constants.LUA_VNUMFLT:
-                self._value = val_union.GetChildMemberWithName("n")
-            case lua_constants.LUA_VSHRSTR | lua_constants.LUA_VLNGSTR:
-                self._expand = self._get_gco(val_union, "TString")
-            case lua_constants.LUA_VLIGHTUSERDATA:
-                self._value = val_union.GetChildMemberWithName("p")
-            case lua_constants.LUA_VUSERDATA:
-                self._expand = self._get_gco(val_union, "Udata")
-            case lua_constants.LUA_VPROTO:
-                self._expand = self._get_gco(val_union, "Proto")
-            case lua_constants.LUA_VUPVAL:
-                self._expand = self._get_gco(val_union, "UpVal")
-            case lua_constants.LUA_VLCL:
-                self._expand = self._get_gco(
-                    val_union, "Closure"
-                ).GetChildMemberWithName("l")
-            case lua_constants.LUA_VLCF:
-                self._value = val_union.GetChildMemberWithName("f")
-            case lua_constants.LUA_VCCL:
-                self._expand = self._get_gco(
-                    val_union, "Closure"
-                ).GetChildMemberWithName("c")
-            case lua_constants.LUA_VTABLE:
-                self._expand = self._get_gco(val_union, "Table").GetSyntheticValue()
-            case _:
-                pass
+        if tt == lua_constants.LUA_VTHREAD:
+            self._expand = self._get_gco(val_union, "lua_State")
+        elif tt == lua_constants.LUA_VNUMINT:
+            self._value = val_union.GetChildMemberWithName("i")
+        elif tt == lua_constants.LUA_VNUMFLT:
+            self._value = val_union.GetChildMemberWithName("n")
+        elif tt == lua_constants.LUA_VSHRSTR or tt == lua_constants.LUA_VLNGSTR:
+            self._expand = self._get_gco(val_union, "TString")
+        elif tt == lua_constants.LUA_VLIGHTUSERDATA:
+            self._value = val_union.GetChildMemberWithName("p")
+        elif tt == lua_constants.LUA_VUSERDATA:
+            self._expand = self._get_gco(val_union, "Udata")
+        elif tt == lua_constants.LUA_VPROTO:
+            self._expand = self._get_gco(val_union, "Proto")
+        elif tt == lua_constants.LUA_VUPVAL:
+            self._expand = self._get_gco(val_union, "UpVal")
+        elif tt == lua_constants.LUA_VLCL:
+            self._expand = self._get_gco(val_union, "Closure").GetChildMemberWithName(
+                "l"
+            )
+        elif tt == lua_constants.LUA_VLCF:
+            self._value = val_union.GetChildMemberWithName("f")
+        elif tt == lua_constants.LUA_VCCL:
+            self._expand = self._get_gco(val_union, "Closure").GetChildMemberWithName(
+                "c"
+            )
+        elif tt == lua_constants.LUA_VTABLE:
+            self._expand = self._get_gco(val_union, "Table").GetSyntheticValue()
+        else:
+            pass
         if self._expand is not None:
             self._expand.SetPreferSyntheticValue(True)
         if self._value is not None:
@@ -391,23 +389,21 @@ class UdataSyntheticProvider:
 
     def get_child_index(self, name: str):
         name = name.lstrip("[").rstrip("]")
-        match name:
-            case "value":
-                return 0
-            case "metatable":
-                return 1
-            case "user values":
-                return 2
+        if name == "value":
+            return 0
+        elif name == "metatable":
+            return 1
+        elif name == "user values":
+            return 2
         return None
 
     def get_child_at_index(self, idx: int):
-        match idx:
-            case 0:
-                return self._ptr
-            case 1:
-                return self._metatable
-            case 2:
-                return self._uvalues
+        if idx == 0:
+            return self._ptr
+        elif idx == 1:
+            return self._metatable
+        elif idx == 2:
+            return self._uvalues
 
     def update(self):
         self._metatable = self._valobj.GetChildMemberWithName("metatable").Clone(
@@ -444,48 +440,47 @@ def _value_summary(
     tt: int,
     tstring: Optional[SBType] = None,
 ):
-    match tt:
-        case lua_constants.LUA_VNIL:
-            return "nil"
-        case lua_constants.LUA_VEMPTY:
-            return "nil (empty)"
-        case lua_constants.LUA_VABSTKEY:
-            return "nil (absent key)"
-        case lua_constants.LUA_VFALSE:
-            return "false"
-        case lua_constants.LUA_VTRUE:
-            return "true"
-        case lua_constants.LUA_VTHREAD:
-            return "thread"
-        case lua_constants.LUA_VNUMINT:
-            i = value.GetChildMemberWithName("i").GetValueAsSigned()
-            return str(i)
-        case lua_constants.LUA_VNUMFLT:
-            n = value.GetChildMemberWithName("n").GetData().GetDouble(SBError(), 0)
-            return str(n)
-        case lua_constants.LUA_VSHRSTR | lua_constants.LUA_VLNGSTR:
-            gc = value.GetChildMemberWithName("gc")
-            if tstring is None:
-                tstring = value.GetTarget().FindFirstType("TString").GetPointerType()
-            return gc.Cast(tstring).GetSummary()
-        case lua_constants.LUA_VLIGHTUSERDATA:
-            value.GetChildMemberWithName("p").GetSummary()
-        case lua_constants.LUA_VUSERDATA:
-            return "userdata"
-        case lua_constants.LUA_VPROTO:
-            return "proto"
-        case lua_constants.LUA_VUPVAL:
-            return "upvalue"
-        case lua_constants.LUA_VLCL:
-            return "Lua closure"
-        case lua_constants.LUA_VLCF:
-            return "light C function"
-        case lua_constants.LUA_VCCL:
-            return "C closure"
-        case lua_constants.LUA_VTABLE:
-            return "table"
-        case _:
-            return "(unknown)"
+    if tt == lua_constants.LUA_VNIL:
+        return "nil"
+    elif tt == lua_constants.LUA_VEMPTY:
+        return "nil (empty)"
+    elif tt == lua_constants.LUA_VABSTKEY:
+        return "nil (absent key)"
+    elif tt == lua_constants.LUA_VFALSE:
+        return "false"
+    elif tt == lua_constants.LUA_VTRUE:
+        return "true"
+    elif tt == lua_constants.LUA_VTHREAD:
+        return "thread"
+    elif tt == lua_constants.LUA_VNUMINT:
+        i = value.GetChildMemberWithName("i").GetValueAsSigned()
+        return str(i)
+    elif tt == lua_constants.LUA_VNUMFLT:
+        n = value.GetChildMemberWithName("n").GetData().GetDouble(SBError(), 0)
+        return str(n)
+    elif tt == lua_constants.LUA_VSHRSTR or tt == lua_constants.LUA_VLNGSTR:
+        gc = value.GetChildMemberWithName("gc")
+        if tstring is None:
+            tstring = value.GetTarget().FindFirstType("TString").GetPointerType()
+        return gc.Cast(tstring).GetSummary()
+    elif tt == lua_constants.LUA_VLIGHTUSERDATA:
+        value.GetChildMemberWithName("p").GetSummary()
+    elif tt == lua_constants.LUA_VUSERDATA:
+        return "userdata"
+    elif tt == lua_constants.LUA_VPROTO:
+        return "proto"
+    elif tt == lua_constants.LUA_VUPVAL:
+        return "upvalue"
+    elif tt == lua_constants.LUA_VLCL:
+        return "Lua closure"
+    elif tt == lua_constants.LUA_VLCF:
+        return "light C function"
+    elif tt == lua_constants.LUA_VCCL:
+        return "C closure"
+    elif tt == lua_constants.LUA_VTABLE:
+        return "table"
+    else:
+        return "(unknown)"
 
 
 # ========================

@@ -330,29 +330,29 @@ def QCborValueSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
-    match raw.GetChildMemberWithName("t").GetValueAsUnsigned():
-        case QCborValueType.Integer:
-            return ""  # Use synthetic value
-        case QCborValueType.Double:
-            return ""
-        case QCborValueType.String:
-            return valobj.GetChildAtIndex(
-                QCborValueSyntheticProvider.VALUE_INDEX
-            ).GetSummary()
-        case QCborValueType.Array:
-            return f"[ size={valobj.GetNumChildren()} ]"
-        case QCborValueType.Map:
-            return f"{{ size={valobj.GetNumChildren()} }}"
-        case QCborValueType.CFalse:
-            return ""
-        case QCborValueType.CTrue:
-            return ""
-        case QCborValueType.Null:
-            return "null"
-        case QCborValueType.Undefined:
-            return "undefined"
-        case x:
-            return f"(unknown type {x})"
+    ty_val = raw.GetChildMemberWithName("t").GetValueAsUnsigned()
+    if ty_val == QCborValueType.Integer:
+        return ""  # Use synthetic value
+    elif ty_val == QCborValueType.Double:
+        return ""
+    elif ty_val == QCborValueType.String:
+        return valobj.GetChildAtIndex(
+            QCborValueSyntheticProvider.VALUE_INDEX
+        ).GetSummary()
+    elif ty_val == QCborValueType.Array:
+        return f"[ size={valobj.GetNumChildren()} ]"
+    elif ty_val == QCborValueType.Map:
+        return f"{{ size={valobj.GetNumChildren()} }}"
+    elif ty_val == QCborValueType.CFalse:
+        return ""
+    elif ty_val == QCborValueType.CTrue:
+        return ""
+    elif ty_val == QCborValueType.Null:
+        return "null"
+    elif ty_val == QCborValueType.Undefined:
+        return "undefined"
+    else:
+        return f"(unknown type {ty_val})"
 
 
 def QJsonDocumentSummaryProvider(
@@ -365,13 +365,13 @@ def QJsonDocumentSummaryProvider(
         return "null"
     size = valobj.GetNumChildren()
     ty = valobj.GetChildAtIndex(QCborValueSyntheticProvider.TYPE_INDEX)
-    match ty.GetValueAsUnsigned():
-        case QCborValueType.Map:
-            return f"{{ size={size} }}"
-        case QCborValueType.Array:
-            return f"[ size={size} ]"
-        case _:
-            return "(invalid)"
+    ty_val = ty.GetValueAsUnsigned()
+    if ty_val == QCborValueType.Map:
+        return f"{{ size={size} }}"
+    elif ty_val == QCborValueType.Array:
+        return f"[ size={size} ]"
+    else:
+        return "(invalid)"
 
 
 def QJsonValueSummaryProvider(
@@ -906,26 +906,24 @@ class QDateTimeSyntheticProvider:
 
     def get_child_index(self, name: str):
         name = name.removeprefix("[").removesuffix("]")
-        match name:
-            case "ms":
-                return 0
-            case "offset-sec":
-                return 1
+        if name == "ms":
+            return 0
+        elif name == "offset-sec":
+            return 1
         return None
 
     def get_child_at_index(self, idx: int):
         if idx < 0 or idx >= self.num_children():
             return None
-        match idx:
-            case 0:
-                return _valobj_from_signed(self._valobj, self._utcdate, "[ms]")
-            case 1:
-                assert self._date is not None
-                off = self._date.utcoffset()
-                assert off is not None
-                return _valobj_from_signed(
-                    self._valobj, int(off.total_seconds()), "[offset-sec]"
-                )
+        if idx == 0:
+            return _valobj_from_signed(self._valobj, self._utcdate, "[ms]")
+        elif idx == 1:
+            assert self._date is not None
+            off = self._date.utcoffset()
+            assert off is not None
+            return _valobj_from_signed(
+                self._valobj, int(off.total_seconds()), "[offset-sec]"
+            )
 
     def has_children(self):
         return True
@@ -1160,91 +1158,85 @@ class _CborContainerSyntheticProviderBase:
             return
         ty = ty_and_flags & 0xFFFFFFFF
         flags = ty_and_flags >> 32
-        match ty:
-            case QCborValueType.Integer:
-                return self._valobj.CreateValueFromAddress(
-                    "", element_ptr, self._target.GetBasicType(lldb.eBasicTypeLongLong)
+        if ty == QCborValueType.Integer:
+            return self._valobj.CreateValueFromAddress(
+                "", element_ptr, self._target.GetBasicType(lldb.eBasicTypeLongLong)
+            )
+        elif ty == QCborValueType.ByteArray or ty == QCborValueType.String:
+            offset = self._process.ReadPointerFromMemory(element_ptr, err)
+            if err.Fail():
+                return
+            size = self._process.ReadPointerFromMemory(self._data_ptr + offset, err)
+            if err.Fail():
+                return
+            if flags & QtCborElementValueFlag.StringIsUtf16:
+                ty = self._target.GetBasicType(lldb.eBasicTypeChar16).GetArrayType(
+                    size // 2
                 )
-            case QCborValueType.ByteArray | QCborValueType.String:
-                offset = self._process.ReadPointerFromMemory(element_ptr, err)
-                if err.Fail():
-                    return
-                size = self._process.ReadPointerFromMemory(self._data_ptr + offset, err)
-                if err.Fail():
-                    return
-                if flags & QtCborElementValueFlag.StringIsUtf16:
-                    ty = self._target.GetBasicType(lldb.eBasicTypeChar16).GetArrayType(
-                        size // 2
-                    )
-                else:
-                    ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(
-                        size
-                    )
-                addr = self._data_ptr + offset + self._pointer_size
-                if size == 0:
-                    # Use fixed data for an empty string.
-                    # Otherwise, LLDB will try to find a null-terminator.
+            else:
+                ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(size)
+            addr = self._data_ptr + offset + self._pointer_size
+            if size == 0:
+                # Use fixed data for an empty string.
+                # Otherwise, LLDB will try to find a null-terminator.
+                data = SBData()
+                data.SetData(SBError(), b"\0\0", lldb.eByteOrderLittle, 8)
+                v = self._valobj.CreateValueFromData("", data, ty)
+            else:
+                if (
+                    flags & QtCborElementValueFlag.StringIsUtf16
+                    and not UNICODE_STR_ARRAY_IS_LIMITED
+                ):
+                    s = self._process.ReadMemory(addr, size, SBError()) or bytes()
+                    try:
+                        s = s.decode("utf-16le").encode("utf-8")
+                    except BaseException as _:
+                        pass
                     data = SBData()
-                    data.SetData(SBError(), b"\0\0", lldb.eByteOrderLittle, 8)
+                    data.SetData(SBError(), s, lldb.eByteOrderLittle, 8)
+                    ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(
+                        len(s)
+                    )
                     v = self._valobj.CreateValueFromData("", data, ty)
                 else:
-                    if (
-                        flags & QtCborElementValueFlag.StringIsUtf16
-                        and not UNICODE_STR_ARRAY_IS_LIMITED
-                    ):
-                        s = self._process.ReadMemory(addr, size, SBError()) or bytes()
-                        try:
-                            s = s.decode("utf-16le").encode("utf-8")
-                        except BaseException as _:
-                            pass
-                        data = SBData()
-                        data.SetData(SBError(), s, lldb.eByteOrderLittle, 8)
-                        ty = self._target.GetBasicType(
-                            lldb.eBasicTypeChar
-                        ).GetArrayType(len(s))
-                        v = self._valobj.CreateValueFromData("", data, ty)
-                    else:
-                        v = self._valobj.CreateValueFromAddress("", addr, ty)
-                return v
-
-            case QCborValueType.Array:
-                return self._valobj.CreateValueFromAddress(
-                    "", element_ptr, self._array_ty()
-                )
-            case QCborValueType.Map:
-                return self._valobj.CreateValueFromAddress(
-                    "", element_ptr, self._map_ty()
-                )
-            case QCborValueType.Tag:
-                return _valobj_from_str(self._valobj, "Unsupported Tag")
-            case QCborValueType.CFalse:
-                return self._valobj.CreateBoolValue("", False)
-            case QCborValueType.CTrue:
-                return self._valobj.CreateBoolValue("", True)
-            case QCborValueType.Null:
-                data = SBData()
-                # Fixed buffer that contains a null value.
-                data.SetData(SBError(), QCBORVALUE_NULL, lldb.eByteOrderLittle, 8)
-                return self._valobj.CreateValueFromData("", data, self._qcborval_ty())
-            case QCborValueType.Undefined:
-                data = SBData()
-                # Fixed buffer that contains an undefined value.
-                data.SetData(SBError(), QCBORVALUE_UNDEFINED, lldb.eByteOrderLittle, 8)
-                return self._valobj.CreateValueFromData("", data, self._qcborval_ty())
-            case QCborValueType.Double:
-                return self._valobj.CreateValueFromAddress(
-                    "", element_ptr, self._target.GetBasicType(lldb.eBasicTypeDouble)
-                )
-            case QCborValueType.DateTime:
-                return _valobj_from_str(self._valobj, "Unsupported DateTime")
-            case QCborValueType.Url:
-                return _valobj_from_str(self._valobj, "Unsupported URL")
-            case QCborValueType.RegularExpression:
-                return _valobj_from_str(self._valobj, "Unsupported regex")
-            case QCborValueType.Uuid:
-                return _valobj_from_str(self._valobj, "Unsupported UUID")
-            case x:
-                return _valobj_from_str(self._valobj, f"Unknown cbor type {x:x}")
+                    v = self._valobj.CreateValueFromAddress("", addr, ty)
+            return v
+        elif ty == QCborValueType.Array:
+            return self._valobj.CreateValueFromAddress(
+                "", element_ptr, self._array_ty()
+            )
+        elif ty == QCborValueType.Map:
+            return self._valobj.CreateValueFromAddress("", element_ptr, self._map_ty())
+        elif ty == QCborValueType.Tag:
+            return _valobj_from_str(self._valobj, "Unsupported Tag")
+        elif ty == QCborValueType.CFalse:
+            return self._valobj.CreateBoolValue("", False)
+        elif ty == QCborValueType.CTrue:
+            return self._valobj.CreateBoolValue("", True)
+        elif ty == QCborValueType.Null:
+            data = SBData()
+            # Fixed buffer that contains a null value.
+            data.SetData(SBError(), QCBORVALUE_NULL, lldb.eByteOrderLittle, 8)
+            return self._valobj.CreateValueFromData("", data, self._qcborval_ty())
+        elif ty == QCborValueType.Undefined:
+            data = SBData()
+            # Fixed buffer that contains an undefined value.
+            data.SetData(SBError(), QCBORVALUE_UNDEFINED, lldb.eByteOrderLittle, 8)
+            return self._valobj.CreateValueFromData("", data, self._qcborval_ty())
+        elif ty == QCborValueType.Double:
+            return self._valobj.CreateValueFromAddress(
+                "", element_ptr, self._target.GetBasicType(lldb.eBasicTypeDouble)
+            )
+        elif ty == QCborValueType.DateTime:
+            return _valobj_from_str(self._valobj, "Unsupported DateTime")
+        elif ty == QCborValueType.Url:
+            return _valobj_from_str(self._valobj, "Unsupported URL")
+        elif ty == QCborValueType.RegularExpression:
+            return _valobj_from_str(self._valobj, "Unsupported regex")
+        elif ty == QCborValueType.Uuid:
+            return _valobj_from_str(self._valobj, "Unsupported UUID")
+        else:
+            return _valobj_from_str(self._valobj, f"Unknown cbor type {ty:x}")
 
         if self._typ == QCborValueType.Array:
             return self._map_el(idx)
@@ -1365,34 +1357,32 @@ class QCborValueSyntheticProvider:
         self._synth_val = None
 
         self._ty = self._valobj.GetChildMemberWithName("t").GetValueAsUnsigned()
-        match self._ty:
-            case QCborValueType.Integer:
-                self._synth_val = self._valobj.GetChildMemberWithName("n")
-            case QCborValueType.ByteArray | QCborValueType.String:
-                arr = self._make_forwarder_array()
-                n = self._valobj.GetChildMemberWithName("n").GetValueAsUnsigned()
-                self._synth_val = arr.GetChildAtIndex(n)
-                if not self._synth_val:
-                    # If the index doesn't exist, it's an empty string.
-                    data = SBData()
-                    data.SetData(SBError(), b"\0", lldb.eByteOrderLittle, 8)
-                    ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(0)
-                    self._synth_val = self._valobj.CreateValueFromData("", data, ty)
-
-            case QCborValueType.Array:
-                self._make_forwarder_array()
-            case QCborValueType.Map:
-                self._make_forwarder_map()
-            case QCborValueType.CFalse:
-                self._synth_val = self._valobj.CreateBoolValue("", False)
-            case QCborValueType.CTrue:
-                self._synth_val = self._valobj.CreateBoolValue("", True)
-            case QCborValueType.Null | QCborValueType.Undefined:
-                pass
-            case QCborValueType.Double:
-                self._synth_val = self._valobj.GetChildMemberWithName("n").Cast(
-                    self._target.GetBasicType(lldb.eBasicTypeDouble)
-                )
+        if self._ty == QCborValueType.Integer:
+            self._synth_val = self._valobj.GetChildMemberWithName("n")
+        elif self._ty == QCborValueType.ByteArray or self._ty == QCborValueType.String:
+            arr = self._make_forwarder_array()
+            n = self._valobj.GetChildMemberWithName("n").GetValueAsUnsigned()
+            self._synth_val = arr.GetChildAtIndex(n)
+            if not self._synth_val:
+                # If the index doesn't exist, it's an empty string.
+                data = SBData()
+                data.SetData(SBError(), b"\0", lldb.eByteOrderLittle, 8)
+                ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(0)
+                self._synth_val = self._valobj.CreateValueFromData("", data, ty)
+        elif self._ty == QCborValueType.Array:
+            self._make_forwarder_array()
+        elif self._ty == QCborValueType.Map:
+            self._make_forwarder_map()
+        elif self._ty == QCborValueType.CFalse:
+            self._synth_val = self._valobj.CreateBoolValue("", False)
+        elif self._ty == QCborValueType.CTrue:
+            self._synth_val = self._valobj.CreateBoolValue("", True)
+        elif self._ty == QCborValueType.Null or self._ty == QCborValueType.Undefined:
+            pass
+        elif self._ty == QCborValueType.Double:
+            self._synth_val = self._valobj.GetChildMemberWithName("n").Cast(
+                self._target.GetBasicType(lldb.eBasicTypeDouble)
+            )
 
     def get_value(self):
         return self._synth_val
@@ -1661,79 +1651,78 @@ class QVariantSyntheticProvider:
         return self._value_obj
 
     def _lookup_type(self, id: int, flags: int, name_obj: SBValue):
-        match id:
-            case QVariantType.Unknown:
-                return None
-            case QVariantType.Bool:
-                return self._target.GetBasicType(lldb.eBasicTypeBool)
-            case QVariantType.Int:
-                return self._target.GetBasicType(lldb.eBasicTypeInt)
-            case QVariantType.UInt:
-                return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt)
-            case QVariantType.LongLong:
-                return self._target.GetBasicType(lldb.eBasicTypeLongLong)
-            case QVariantType.ULongLong:
-                return self._target.GetBasicType(lldb.eBasicTypeUnsignedLongLong)
-            case QVariantType.Double:
-                return self._target.GetBasicType(lldb.eBasicTypeDouble)
-            case QVariantType.Long:
-                return self._target.GetBasicType(lldb.eBasicTypeLong)
-            case QVariantType.Short:
-                return self._target.GetBasicType(lldb.eBasicTypeShort)
-            case QVariantType.Char:
-                return self._target.GetBasicType(lldb.eBasicTypeChar)
-            case QVariantType.ULong:
-                return self._target.GetBasicType(lldb.eBasicTypeUnsignedLong)
-            case QVariantType.UShort:
-                return self._target.GetBasicType(lldb.eBasicTypeUnsignedShort)
-            case QVariantType.UChar:
-                return self._target.GetBasicType(lldb.eBasicTypeUnsignedChar)
-            case QVariantType.Float:
-                return self._target.GetBasicType(lldb.eBasicTypeFloat)
-            case QVariantType.VoidStar:
-                return self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
-            case QVariantType.QStringList:
-                return self._target.FindFirstType("QList<QString>")
-            case QVariantType.QVariant:
-                return self._valobj.GetType()
-            case QVariantType.QByteArrayList:
-                return self._target.FindFirstType("QList<QByteArray>")
-            case QVariantType.QObjectStar:
-                return self._target.FindFirstType("QObject").GetPointerType()
-            case QVariantType.SChar:
-                return self._target.GetBasicType(lldb.eBasicTypeSignedChar)
-            case QVariantType.Void:
-                return self._target.GetBasicType(lldb.eBasicTypeVoid)
-            case QVariantType.Nullptr:
-                return self._target.GetBasicType(lldb.eBasicTypeNullPtr)
-            case QVariantType.QVariantMap:
-                # Sometimes it's with a space and sometimes without
-                return self._target.FindFirstType(
-                    "QMap<QString, QVariant>"
-                ) or self._target.FindFirstType("QMap<QString,QVariant>")
-            case QVariantType.QVariantList:
-                return self._target.FindFirstType("QList<QVariant>")
-            case QVariantType.QVariantHash:
-                # Sometimes it's with a space and sometimes without
-                return self._target.FindFirstType(
-                    "QHash<QString, QVariant>"
-                ) or self._target.FindFirstType("QHash<QString,QVariant>")
-            case QVariantType.QVariantPair:
-                return self._target.FindFirstType("QPair<QVariant>")
-            case QVariantType.Char16:
-                return self._target.GetBasicType(lldb.eBasicTypeChar16)
-            case QVariantType.Char32:
-                return self._target.GetBasicType(lldb.eBasicTypeChar32)
-            case QVariantType.Int128:
-                return self._target.GetBasicType(lldb.eBasicTypeInt128)
-            case QVariantType.UInt128:
-                return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt128)
-            case QVariantType.Float128:
-                return self._target.GetBasicType(lldb.eBasicTypeFloat128)
-            case QVariantType.BFloat16:
-                pass
-            case QVariantType.Float16:
-                pass
+        if id == QVariantType.Unknown:
+            return None
+        elif id == QVariantType.Bool:
+            return self._target.GetBasicType(lldb.eBasicTypeBool)
+        elif id == QVariantType.Int:
+            return self._target.GetBasicType(lldb.eBasicTypeInt)
+        elif id == QVariantType.UInt:
+            return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt)
+        elif id == QVariantType.LongLong:
+            return self._target.GetBasicType(lldb.eBasicTypeLongLong)
+        elif id == QVariantType.ULongLong:
+            return self._target.GetBasicType(lldb.eBasicTypeUnsignedLongLong)
+        elif id == QVariantType.Double:
+            return self._target.GetBasicType(lldb.eBasicTypeDouble)
+        elif id == QVariantType.Long:
+            return self._target.GetBasicType(lldb.eBasicTypeLong)
+        elif id == QVariantType.Short:
+            return self._target.GetBasicType(lldb.eBasicTypeShort)
+        elif id == QVariantType.Char:
+            return self._target.GetBasicType(lldb.eBasicTypeChar)
+        elif id == QVariantType.ULong:
+            return self._target.GetBasicType(lldb.eBasicTypeUnsignedLong)
+        elif id == QVariantType.UShort:
+            return self._target.GetBasicType(lldb.eBasicTypeUnsignedShort)
+        elif id == QVariantType.UChar:
+            return self._target.GetBasicType(lldb.eBasicTypeUnsignedChar)
+        elif id == QVariantType.Float:
+            return self._target.GetBasicType(lldb.eBasicTypeFloat)
+        elif id == QVariantType.VoidStar:
+            return self._target.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
+        elif id == QVariantType.QStringList:
+            return self._target.FindFirstType("QList<QString>")
+        elif id == QVariantType.QVariant:
+            return self._valobj.GetType()
+        elif id == QVariantType.QByteArrayList:
+            return self._target.FindFirstType("QList<QByteArray>")
+        elif id == QVariantType.QObjectStar:
+            return self._target.FindFirstType("QObject").GetPointerType()
+        elif id == QVariantType.SChar:
+            return self._target.GetBasicType(lldb.eBasicTypeSignedChar)
+        elif id == QVariantType.Void:
+            return self._target.GetBasicType(lldb.eBasicTypeVoid)
+        elif id == QVariantType.Nullptr:
+            return self._target.GetBasicType(lldb.eBasicTypeNullPtr)
+        elif id == QVariantType.QVariantMap:
+            # Sometimes it's with a space and sometimes without
+            return self._target.FindFirstType(
+                "QMap<QString, QVariant>"
+            ) or self._target.FindFirstType("QMap<QString,QVariant>")
+        elif id == QVariantType.QVariantList:
+            return self._target.FindFirstType("QList<QVariant>")
+        elif id == QVariantType.QVariantHash:
+            # Sometimes it's with a space and sometimes without
+            return self._target.FindFirstType(
+                "QHash<QString, QVariant>"
+            ) or self._target.FindFirstType("QHash<QString,QVariant>")
+        elif id == QVariantType.QVariantPair:
+            return self._target.FindFirstType("QPair<QVariant>")
+        elif id == QVariantType.Char16:
+            return self._target.GetBasicType(lldb.eBasicTypeChar16)
+        elif id == QVariantType.Char32:
+            return self._target.GetBasicType(lldb.eBasicTypeChar32)
+        elif id == QVariantType.Int128:
+            return self._target.GetBasicType(lldb.eBasicTypeInt128)
+        elif id == QVariantType.UInt128:
+            return self._target.GetBasicType(lldb.eBasicTypeUnsignedInt128)
+        elif id == QVariantType.Float128:
+            return self._target.GetBasicType(lldb.eBasicTypeFloat128)
+        elif id == QVariantType.BFloat16:
+            pass
+        elif id == QVariantType.Float16:
+            pass
         # Lookup the type by name
         name_addr = name_obj.GetLoadAddress()
         proc: SBProcess = self._target.GetProcess()
@@ -2051,18 +2040,16 @@ class QHostAddressSyntheticProvider:
 
     def get_child_index(self, name: str):
         name = name.removeprefix("[").removesuffix("]")
-        match name:
-            case "Protocol":
-                return 0
-            case "ScopeID":
-                return 1
+        if name == "Protocol":
+            return 0
+        elif name == "ScopeID":
+            return 1
 
     def get_child_at_index(self, idx: int):
-        match idx:
-            case 0:
-                return self._proto
-            case 1:
-                return self._scope_id
+        if idx == 0:
+            return self._proto
+        elif idx == 1:
+            return self._scope_id
 
     def has_children(self):
         return True
@@ -2123,38 +2110,36 @@ class QImageSyntheticProvider:
 
     def get_child_index(self, name: str):
         name = name.removeprefix("[").removesuffix("]")
-        match name:
-            case "Width":
-                return self.WIDTH_INDEX
-            case "Height":
-                return self.HEIGHT_INDEX
-            case "Format":
-                return self.FORMAT_INDEX
-            case "Data":
-                return self.DATA_INDEX
-            case "ByteSize":
-                return self.N_BYTES_INDEX
-            case "Stride":
-                return self.STRIDE_INDEX
-            case "DevicePixelRatio":
-                return self.DPR_INDEX
+        if name == "Width":
+            return self.WIDTH_INDEX
+        elif name == "Height":
+            return self.HEIGHT_INDEX
+        elif name == "Format":
+            return self.FORMAT_INDEX
+        elif name == "Data":
+            return self.DATA_INDEX
+        elif name == "ByteSize":
+            return self.N_BYTES_INDEX
+        elif name == "Stride":
+            return self.STRIDE_INDEX
+        elif name == "DevicePixelRatio":
+            return self.DPR_INDEX
 
     def get_child_at_index(self, idx: int):
-        match idx:
-            case self.WIDTH_INDEX:
-                return self._width
-            case self.HEIGHT_INDEX:
-                return self._height
-            case self.FORMAT_INDEX:
-                return self._format
-            case self.DATA_INDEX:
-                return self._data
-            case self.N_BYTES_INDEX:
-                return self._n_bytes
-            case self.STRIDE_INDEX:
-                return self._stride
-            case self.DPR_INDEX:
-                return self._dpr
+        if idx == self.WIDTH_INDEX:
+            return self._width
+        elif idx == self.HEIGHT_INDEX:
+            return self._height
+        elif idx == self.FORMAT_INDEX:
+            return self._format
+        elif idx == self.DATA_INDEX:
+            return self._data
+        elif idx == self.N_BYTES_INDEX:
+            return self._n_bytes
+        elif idx == self.STRIDE_INDEX:
+            return self._stride
+        elif idx == self.DPR_INDEX:
+            return self._dpr
 
     def has_children(self):
         return True
@@ -2264,26 +2249,24 @@ class QObjectSyntheticProvider:
 
     def get_child_index(self, name: str):
         name = name.removeprefix("[").removesuffix("]")
-        match name:
-            case "Name":
-                return self.NAME_INDEX
-            case "Parent":
-                return self.PARENT_INDEX
-            case "PropertyNames":
-                return self.PROP_NAMES_INDEX
-            case "PropertyValues":
-                return self.PROP_VALUES_INDEX
+        if name == "Name":
+            return self.NAME_INDEX
+        elif name == "Parent":
+            return self.PARENT_INDEX
+        elif name == "PropertyNames":
+            return self.PROP_NAMES_INDEX
+        elif name == "PropertyValues":
+            return self.PROP_VALUES_INDEX
 
     def get_child_at_index(self, idx: int):
-        match idx:
-            case self.NAME_INDEX:
-                return self._name
-            case self.PARENT_INDEX:
-                return self._parent
-            case self.PROP_NAMES_INDEX:
-                return self._prop_names
-            case self.PROP_VALUES_INDEX:
-                return self._prop_values
+        if idx == self.NAME_INDEX:
+            return self._name
+        elif idx == self.PARENT_INDEX:
+            return self._parent
+        elif idx == self.PROP_NAMES_INDEX:
+            return self._prop_names
+        elif idx == self.PROP_VALUES_INDEX:
+            return self._prop_values
 
     def has_children(self):
         return True
@@ -2384,44 +2367,42 @@ class QUrlSyntheticProvider:
 
     def get_child_index(self, name: str):
         name = name.removeprefix("[").removesuffix("]")
-        match name:
-            case "Scheme":
-                return self.SCHEME_INDEX
-            case "Username":
-                return self.USERNAME_INDEX
-            case "Password":
-                return self.PASS_INDEX
-            case "Host":
-                return self.HOST_INDEX
-            case "Port":
-                return self.PORT_INDEX
-            case "Path":
-                return self.PATH_INDEX
-            case "Query":
-                return self.QUERY_INDEX
-            case "Fragment":
-                return self.FRAGMENT_INDEX
+        if name == "Scheme":
+            return self.SCHEME_INDEX
+        elif name == "Username":
+            return self.USERNAME_INDEX
+        elif name == "Password":
+            return self.PASS_INDEX
+        elif name == "Host":
+            return self.HOST_INDEX
+        elif name == "Port":
+            return self.PORT_INDEX
+        elif name == "Path":
+            return self.PATH_INDEX
+        elif name == "Query":
+            return self.QUERY_INDEX
+        elif name == "Fragment":
+            return self.FRAGMENT_INDEX
 
     def get_child_at_index(self, idx: int):
-        match idx:
-            case self.SCHEME_INDEX:
-                return self._scheme
-            case self.USERNAME_INDEX:
-                return self._user
-            case self.PASS_INDEX:
-                return self._pass
-            case self.HOST_INDEX:
-                return self._host
-            case self.PORT_INDEX:
-                return self._port
-            case self.PATH_INDEX:
-                return self._path
-            case self.QUERY_INDEX:
-                return self._query
-            case self.FRAGMENT_INDEX:
-                return self._fragment
-            case self.COMBINED_INDEX:
-                return self._combined
+        if idx == self.SCHEME_INDEX:
+            return self._scheme
+        elif idx == self.USERNAME_INDEX:
+            return self._user
+        elif idx == self.PASS_INDEX:
+            return self._pass
+        elif idx == self.HOST_INDEX:
+            return self._host
+        elif idx == self.PORT_INDEX:
+            return self._port
+        elif idx == self.PATH_INDEX:
+            return self._path
+        elif idx == self.QUERY_INDEX:
+            return self._query
+        elif idx == self.FRAGMENT_INDEX:
+            return self._fragment
+        elif idx == self.COMBINED_INDEX:
+            return self._combined
 
     def has_children(self):
         return True
