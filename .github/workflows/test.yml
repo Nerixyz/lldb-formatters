@@ -18,7 +18,7 @@ jobs:
         include:
           - os: windows-latest
           - os: macos-latest
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             compiler: clang
           - os: ubuntu-latest
             compiler: gcc
@@ -31,9 +31,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: 🪟/🐧 Install LLVM and Clang
+      - name: 🪟 Install LLVM and Clang
         uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
-        if: runner.os == 'Windows' || runner.os == 'Linux'
+        if: runner.os == 'Windows'
         with:
           version: "22.1"
 
@@ -57,10 +57,11 @@ jobs:
       - name: 🐧 Install LLDB
         if: runner.os == 'Linux'
         run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble main'
           sudo apt update
-          # sudo apt install -y --no-install-recommends lldb-19 python3
-          sudo update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-22 20
-          # sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3 20
+          sudo apt install lldb liblldb-dev
+          lldb --version
           which python3
           python3 --version
           PYTHONPATH=`lldb -P` python3 -c 'import lldb'
@@ -114,7 +115,11 @@ jobs:
 
       - name: 🍏 Configure
         if: runner.os == 'macOS'
-        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On -DPython3_PATH="$(dirname $(xcrun -f python3))"
+        run: |
+          set -x
+          unset Python3_ROOT_DIR
+          unset Python_ROOT_DIR
+          cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On -DPython3_PATH="$(dirname $(xcrun -f python3))"
 
       - name: Build
         run: ninja -C build
