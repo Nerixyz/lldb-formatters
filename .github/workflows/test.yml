@@ -31,9 +31,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: 🪟/🐧 Install LLVM and Clang
+      - name: 🪟 Install LLVM and Clang
         uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
-        if: runner.os == 'Windows' || runner.os == 'Linux'
+        if: runner.os == 'Windows'
         with:
           version: "22.1"
 
@@ -58,7 +58,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt update
-          sudo apt install -y --no-install-recommends lldb
+          sudo apt install -y --no-install-recommends lldb python3.11
+          sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 20
+          which python3
+          python3 --version
+          PYTHONPATH=`lldb -P` python3 -c 'import lldb'
 
       - name: 🐧 Use GCC
         if: runner.os == 'Linux' && matrix.compiler == 'gcc'
@@ -73,15 +77,15 @@ jobs:
           echo "CC=clang" >> "$GITHUB_ENV"
           echo "CXX=clang++" >> "$GITHUB_ENV"
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
-        with:
-          xcode-version: latest
-
-      - name: 🍏 Setup PYTHONPATH
+      - name: 🍏 Setup Python
         if: runner.os == 'macOS'
         run: |
-          echo "PYTHONPATH=$(lldb -P)" >> "$GITHUB_ENV"
+          brew install python@3.11
+          export PYTHONPATH=`lldb -P`
+          echo "PYTHONPATH=$PYTHONPATH" >> "$GITHUB_ENV"
+          which python3
+          python3 --version
+          python3 -c 'import lldb'
 
       - name: Install Qt6
         uses: jurplel/install-qt-action@v4.3.1
@@ -109,7 +113,7 @@ jobs:
         run: ninja -C build
 
       - name: Setup tmate session
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && failure()
         uses: mxschmitt/action-tmate@v3
 
       - name: Test
