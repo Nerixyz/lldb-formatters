@@ -8,7 +8,7 @@ from lldb import (
     SBDebugger,
     SBProcess,
 )
-from typing import Callable
+from typing import Callable, Optional, Union
 from qt_constants import (
     QDateTimeConstants,
     QHashConstants,
@@ -35,7 +35,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     def add_summary(
         type_name: str,
         *,
-        regex: str | None = None,
+        regex: Optional[str] = None,
         other_names: list[str] = [],
     ):
         type_names = other_names + [type_name]
@@ -49,7 +49,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     def add_synthetic(
         name: str,
         *,
-        regex: str | None = None,
+        regex: Optional[str] = None,
         other_names: list[str] = [],
     ):
         cmd = f"type synthetic add -w qt -l {__name__}.{name}SyntheticProvider"
@@ -164,7 +164,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
 
 def _add_summary_string(
     dbg: SBDebugger,
-    type_names: str | list[str],
+    type_names: Union[str, list[str]],
     summary: str,
     *,
     regex=False,
@@ -187,13 +187,13 @@ def _get_lldb_version(dbg: SBDebugger) -> tuple[int, int, int]:
 
 def QStringSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     return _qarraydata_summary(valobj, lldb.eBasicTypeChar16, "u")
 
 
 def QByteArraySummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     return _qarraydata_summary(valobj, lldb.eBasicTypeChar, "")
 
 
@@ -225,7 +225,7 @@ def _make_utf16_valobj(ptr: SBValue, size: int):
         size = min(size, limit_obj.GetUnsignedIntegerValue())
 
     process = ptr.GetProcess()
-    s: bytes = process.ReadMemory(ptr.GetValueAsAddress(), size * 2, SBError())
+    s = process.ReadMemory(ptr.GetValueAsAddress(), size * 2, SBError()) or bytes()
     try:
         s = s.decode("utf-16le").encode("utf-8")
     except BaseException as _:
@@ -238,7 +238,7 @@ def _make_utf16_valobj(ptr: SBValue, size: int):
 
 def QStringViewSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     valobj = valobj.GetNonSyntheticValue()
     ptr: SBValue = valobj.GetChildMemberWithName("m_data")
     size = valobj.GetChildMemberWithName("m_size").GetValueAsUnsigned()
@@ -249,21 +249,21 @@ def QStringViewSummaryProvider(
 
 def QUuidSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     data1 = valobj.GetChildMemberWithName("data1").unsigned
     data2 = valobj.GetChildMemberWithName("data2").unsigned
     data3 = valobj.GetChildMemberWithName("data3").unsigned
     data4 = valobj.GetChildMemberWithName("data4").GetData()
     e = SBError()
     data4 = data4.ReadRawData(e, 0, 8)
-    if e.Fail():
+    if e.Fail() or data4 is None:
         return None
     return f"{data1:08x}-{data2:04x}-{data3:04x}-{data4[0]:02x}{data4[1]:02x}-{data4[2]:02x}{data4[3]:02x}{data4[4]:02x}{data4[5]:02x}{data4[6]:02x}{data4[7]:02x}"
 
 
 def QRectSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     valobj = valobj.GetNonSyntheticValue()
     x1 = _prefer_synthetic(valobj.GetChildMemberWithName("x1")).signed
     x2 = _prefer_synthetic(valobj.GetChildMemberWithName("x2")).signed
@@ -274,7 +274,7 @@ def QRectSummaryProvider(
 
 def QTimeSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     valobj = valobj.GetNonSyntheticValue()
     time = _QTime(valobj.GetChildMemberWithName("mds").signed)
     if time.null():
@@ -291,7 +291,7 @@ def QTimeSummaryProvider(
 
 def QDateSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     valobj = valobj.GetNonSyntheticValue()
     date = _QDate(valobj.GetChildMemberWithName("jd").GetValueAsSigned())
     if not date.valid:
@@ -301,7 +301,7 @@ def QDateSummaryProvider(
 
 def QDateTimeSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     n_children = valobj.GetNumChildren()
     if n_children == 0:
         return "(invalid)"
@@ -328,7 +328,7 @@ def get_sizet_ptr(target: SBTarget) -> SBType:
 
 def QCborValueSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     match raw.GetChildMemberWithName("t").GetValueAsUnsigned():
         case QCborValueType.Integer:
@@ -357,7 +357,7 @@ def QCborValueSummaryProvider(
 
 def QJsonDocumentSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     void_ptr = valobj.GetTarget().GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
     d_ptr: SBValue = raw.GetChildAtIndex(0).Cast(void_ptr)
@@ -376,7 +376,7 @@ def QJsonDocumentSummaryProvider(
 
 def QJsonValueSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     v: SBValue = valobj.GetNonSyntheticValue().GetChildAtIndex(0).GetSyntheticValue()
     s = v.GetSummary()
     if s is None:
@@ -386,7 +386,7 @@ def QJsonValueSummaryProvider(
 
 def QJsonValueConstRefSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     v: SBValue = valobj.GetChildAtIndex(QJsonValueConstRefSyntheticProvider.VALUE_IDX)
     s = v.GetSummary()
     if s is None:
@@ -518,7 +518,7 @@ class _ArraySyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._backend = valobj
         self._size = 0
-        self._val: SBValue | None = None
+        self._val: Optional[SBValue] = None
 
     def num_children(self):
         return self._size
@@ -633,7 +633,7 @@ class QVarLengthArraySyntheticProvider(_ArraySyntheticProvider):
 
 
 class _DispatchedSynthetic:
-    items: list[tuple[str, Callable | str]] = []
+    items: list[tuple[str, Union[Callable, str]]] = []
 
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
@@ -935,7 +935,7 @@ class QHashSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._size = 0
         self._num_buckets = 0
-        self._last_bucket: tuple[int, int] | None = None
+        self._last_bucket: Optional[tuple[int, int]] = None
         self._valobj = valobj
 
     def num_children(self):
@@ -967,7 +967,7 @@ class QHashSyntheticProvider:
             )
             offsets = span_obj.GetChildAtIndex(self._span_offsets_idx)
             buf = proc.ReadMemory(offsets.load_addr, QHashConstants.N_ENTRIES, err)
-            if err.Fail():
+            if err.Fail() or buf is None:
                 return None
             # go through each entry
             while cur_bucket < last_bucket:
@@ -1192,7 +1192,7 @@ class _CborContainerSyntheticProviderBase:
                         flags & QtCborElementValueFlag.StringIsUtf16
                         and not UNICODE_STR_ARRAY_IS_LIMITED
                     ):
-                        s: bytes = self._process.ReadMemory(addr, size, SBError())
+                        s = self._process.ReadMemory(addr, size, SBError()) or bytes()
                         try:
                             s = s.decode("utf-16le").encode("utf-8")
                         except BaseException as _:
@@ -1314,8 +1314,8 @@ class QCborValueSyntheticProvider:
         self._target: SBTarget = valobj.GetTarget()
         self._arr_ty = LazyType(self._target, ("QJsonArray", "QCborArray"))
         self._map_ty = LazyType(self._target, ("QJsonObject", "QCborMap"))
-        self._forwarder: SBValue | None = None
-        self._synth_val: SBValue | None = None
+        self._forwarder: Optional[SBValue] = None
+        self._synth_val: Optional[SBValue] = None
         self._ty = QCborValueType.Undefined
 
     def num_children(self):
@@ -1543,7 +1543,7 @@ class QVariantFlag:
 
 def QVariantSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     is_null = (
         raw.GetChildMemberWithName("d")
@@ -1571,11 +1571,11 @@ class QVariantSyntheticProvider:
         self._valobj = valobj
         self._target: SBTarget = valobj.GetTarget()
         self._process: SBProcess = valobj.GetProcess()
-        self._forwarder: SBValue | None = None
-        self._value_obj: SBValue | None = None
+        self._forwarder: Optional[SBValue] = None
+        self._value_obj: Optional[SBValue] = None
         self._ty = QCborValueType.Undefined
         self._type = QVariantType.Unknown
-        self._type_obj: SBValue | None = None
+        self._type_obj: Optional[SBValue] = None
         self._ty_interface = self._target.FindFirstType("QtPrivate::QMetaTypeInterface")
         self._char_arr_ty = self._target.GetBasicType(lldb.eBasicTypeChar).GetArrayType(
             0
@@ -1758,7 +1758,7 @@ class QVariantSyntheticProvider:
 
 def QDirSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     vo = valobj.GetChildAtIndex(QDirSyntheticProvider.NAME_INDEX)
     if not vo:
         return ""
@@ -1771,8 +1771,8 @@ class QDirSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
         self._target: SBTarget = valobj.GetTarget()
-        self._d_ptr: SBValue | None = None
-        self._name_val: SBValue | None = None
+        self._d_ptr: Optional[SBValue] = None
+        self._name_val: Optional[SBValue] = None
         self._qstring_ty = self._target.FindFirstType("QString")
         self._qdirp_ty = self._target.FindFirstType("QDirPrivate").GetPointerType()
         self._has_priv = bool(self._qdirp_ty)
@@ -1818,7 +1818,7 @@ class QDirSyntheticProvider:
 
 def QFileSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     vo = valobj.GetChildAtIndex(QFileSyntheticProvider.NAME_INDEX)
     if not vo:
         return ""
@@ -1832,8 +1832,8 @@ class QFileSyntheticProvider:
         self._valobj = valobj
         self._target: SBTarget = valobj.GetTarget()
         self._process: SBProcess = valobj.GetProcess()
-        self._d_ptr: SBValue | None = None
-        self._name_val: SBValue | None = None
+        self._d_ptr: Optional[SBValue] = None
+        self._name_val: Optional[SBValue] = None
         self._qstring_ty = self._target.FindFirstType("QString")
         self._qfilep_ty = self._target.FindFirstType("QFilePrivate")
         self._has_priv = bool(self._qfilep_ty)
@@ -1883,7 +1883,7 @@ class QFileSyntheticProvider:
 
 def QFileInfoSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     vo = valobj.GetChildAtIndex(QFileInfoSyntheticProvider.NAME_INDEX)
     if not vo:
         return ""
@@ -1896,8 +1896,8 @@ class QFileInfoSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
         self._target: SBTarget = valobj.GetTarget()
-        self._d_ptr: SBValue | None = None
-        self._name_val: SBValue | None = None
+        self._d_ptr: Optional[SBValue] = None
+        self._name_val: Optional[SBValue] = None
         self._qstring_ty = self._target.FindFirstType("QString")
         self._qfip_ty = self._target.FindFirstType("QFileInfoPrivate").GetPointerType()
         self._has_priv = bool(self._qfip_ty)
@@ -1943,7 +1943,7 @@ class QFileInfoSyntheticProvider:
 
 def QGenericMatrixSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     m: SBType = raw.GetChildMemberWithName("m").GetType()
     m_sz = m.GetByteSize()
@@ -2000,7 +2000,7 @@ class QGenericMatrixSyntheticProvider:
 
 def QHostAddressSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     tgt: SBTarget = valobj.GetTarget()
     proc: SBProcess = tgt.GetProcess()
@@ -2079,7 +2079,7 @@ class QHostAddressSyntheticProvider:
 
 def QImageSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     if raw.GetChildMemberWithName("d").GetValueAsAddress() == 0:
         return "(null)"
@@ -2227,7 +2227,7 @@ class QImageSyntheticProvider:
 
 def QObjectSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     v = valobj.GetChildAtIndex(QObjectSyntheticProvider.NAME_INDEX)
     if not v:
         return ""
@@ -2343,7 +2343,7 @@ class QObjectSyntheticProvider:
 
 def QUrlSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     v = valobj.GetChildAtIndex(QUrlSyntheticProvider.COMBINED_INDEX)
     if not v:
         return "(null)"
@@ -2508,7 +2508,7 @@ class QUrlSyntheticProvider:
         addr = self._process.ReadPointerFromMemory(base_ptr + self._ptr_size, err)
         if addr == 0:
             return ""
-        s: bytes = self._process.ReadMemory(addr, sz * 2, err)
+        s = self._process.ReadMemory(addr, sz * 2, err) or bytes()
         try:
             return s.decode("utf-16le")
         except BaseException as _:
@@ -2518,7 +2518,7 @@ class QUrlSyntheticProvider:
 def _valobj_from_signed(source: SBValue, val: int, name="") -> SBValue:
     ty: SBType = source.target.GetBasicType(lldb.eBasicTypeLongLong)
     data = SBData.CreateDataFromInt(val, ty.GetByteSize())
-    return source.CreateValueFromData(name, data, ty)
+    return source.CreateValueFromData(name, data, ty)  # type: ignore
 
 
 def _valobj_from_str(source: SBValue, val: str, name="") -> SBValue:
@@ -2534,7 +2534,7 @@ def _prefer_synthetic(value: SBValue) -> SBValue:
     return value
 
 
-def _numeric_index(name: str) -> int | None:
+def _numeric_index(name: str) -> Optional[int]:
     name = name.removeprefix("[").removesuffix("]")
     try:
         return int(name)
@@ -2542,7 +2542,7 @@ def _numeric_index(name: str) -> int | None:
         return None
 
 
-def _qdatetime_data(valobj: SBValue) -> tuple[datetime.datetime, bool] | None:
+def _qdatetime_data(valobj: SBValue) -> Optional[tuple[datetime.datetime, bool]]:
     tgt: SBTarget = valobj.GetTarget()
     ptr_size: int = tgt.GetAddressByteSize()
     void_ptr = tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()

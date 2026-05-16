@@ -14,6 +14,7 @@ from nerix_common import (
     ExpandingSyntheticProvider,
     DispatchedSynthetic,
 )
+from typing import Union, Optional
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
@@ -102,7 +103,7 @@ class BArraySyntheticProvider(ArraySyntheticProvider):
         super().__init__(valobj, internal_dict)
         self._value_ty = valobj.GetTarget().FindFirstType("boost::json::value")
 
-    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue | int, int]:
+    def _pointer_and_size(self, valobj: SBValue) -> tuple[Union[SBValue, int], int]:
         tbl: SBValue = valobj.GetChildMemberWithName("t_")
         s = tbl.GetChildMemberWithName("size").GetValueAsUnsigned()
         return tbl.GetValueAsAddress() + 8, s
@@ -173,7 +174,7 @@ class ValueSyntheticProvider(ExpandingSyntheticProvider):
             return self._val
         return super().get_child_at_index(idx)
 
-    def _get_value(self, valobj: SBValue) -> SBValue | None:
+    def _get_value(self, valobj: SBValue) -> Optional[SBValue]:
         u: SBValue = valobj.GetChildAtIndex(0)
         sca: SBValue = u.GetChildMemberWithName("sca_")
         kind = sca.GetChildMemberWithName("k").GetValueAsUnsigned()

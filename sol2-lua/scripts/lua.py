@@ -18,6 +18,7 @@ from nerix_common import (
     DispatchedSynthetic,
 )
 import lua_constants
+from typing import Optional
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
@@ -52,7 +53,7 @@ def _tt_val(v: SBValue):
 
 def TValueSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
     tt = _tt_val(raw.GetChildMemberWithName("tt_"))
     match tt:
@@ -70,7 +71,7 @@ def TValueSummaryProvider(
 
 def TStringSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     len = valobj.GetNumChildren()
     raw: SBValue = valobj.GetNonSyntheticValue()
     return (
@@ -102,7 +103,7 @@ class TableSyntheticProvider:
         self._valobj = valobj
 
         # for tables
-        self._metatable: SBValue | None = None
+        self._metatable: Optional[SBValue] = None
         self._arr_children: list[SBValue] = []
         self._named_children: list[SBValue] = []
 
@@ -318,10 +319,10 @@ class LuaStateSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
         self._n_stack = 0
-        self._stack_begin: SBValue | None = None
+        self._stack_begin: Optional[SBValue] = None
         self._global_state = None
         self._ty_tvalue = valobj.GetTarget().FindFirstType("TValue")
-        ty_stack_value: SBValue = valobj.GetTarget().FindFirstType("StackValue")
+        ty_stack_value = valobj.GetTarget().FindFirstType("StackValue")
         self._stack_value_size = ty_stack_value.GetByteSize()
 
     def num_children(self):
@@ -381,9 +382,9 @@ class UdataSyntheticProvider:
         self._ty_void: SBType = tgt.GetBasicType(lldb.eBasicTypeVoid).GetPointerType()
         self._byte_order = tgt.GetByteOrder()
         self._ptr_byte_size = tgt.GetAddressByteSize()
-        self._metatable: SBValue | None = None
+        self._metatable: Optional[SBValue] = None
         self._ptr = None
-        self._uvalues: SBValue | None = None
+        self._uvalues: Optional[SBValue] = None
 
     def num_children(self):
         return 2 + (1 if self._uvalues is not None else 0)
@@ -441,7 +442,7 @@ class UdataSyntheticProvider:
 def _value_summary(
     value: SBValue,
     tt: int,
-    tstring: SBType | None = None,
+    tstring: Optional[SBType] = None,
 ):
     match tt:
         case lua_constants.LUA_VNIL:
@@ -495,7 +496,7 @@ def _value_summary(
 class SolVariadicArgsSyntheticProvider:
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
-        self._L: SBValue | None = None
+        self._L: Optional[SBValue] = None
         self._begin = 0
         self._end = 0
 
@@ -530,7 +531,7 @@ class SolBasicReferenceSyntheticProvider(ExpandingSyntheticProvider):
 
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
-        self._val: SBValue | None = None
+        self._val: Optional[SBValue] = None
         self._ty_table = valobj.GetTarget().FindFirstType("Table").GetPointerType()
         self._ty_tvalue: SBType = valobj.GetTarget().FindFirstType("TValue")
         self._tvalue_size = self._ty_tvalue.GetByteSize()
@@ -593,7 +594,7 @@ class SolBasicReferenceSyntheticProvider(ExpandingSyntheticProvider):
 
 def SolBasicReferenceSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
-) -> str | None:
+) -> Optional[str]:
     child: SBValue = valobj.GetChildAtIndex(
         SolBasicReferenceSyntheticProvider.IDX_VALUE
     )

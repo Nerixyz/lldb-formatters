@@ -8,6 +8,7 @@ from nerix_common import (
     make_add_synthetic,
     numeric_index,
 )
+from typing import Optional
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
@@ -96,7 +97,7 @@ def GenericValueSummaryProvider(
             return f"Unknown type {x} (flags={flags:#x})"
 
 
-def StringSummary(data: SBValue, flags: int | None = None):
+def StringSummary(data: SBValue, flags: Optional[int] = None):
     if flags is None:
         flags = (
             data.GetChildMemberWithName("f")
