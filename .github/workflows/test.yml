@@ -22,7 +22,7 @@ jobs:
             compiler: clang
           - os: ubuntu-latest
             compiler: gcc
-    name: 🧪 Test on ${{ matrix.os }}
+    name: 🧪 Test on ${{ matrix.os }}${{case(matrix.compiler == '', '', format(' with {0}', matrix.compiler))}}
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -31,9 +31,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: 🪟 Install LLVM and Clang
+      - name: 🪟/🐧 Install LLVM and Clang
         uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' || runner.os == 'Linux'
         with:
           version: "22.1"
 
@@ -72,6 +72,11 @@ jobs:
           sudo apt install -y --no-install-recommends clang
           echo "CC=clang" >> "$GITHUB_ENV"
           echo "CXX=clang++" >> "$GITHUB_ENV"
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        with:
+          xcode-version: latest
 
       - name: 🍏 Setup PYTHONPATH
         if: runner.os == 'macOS'
