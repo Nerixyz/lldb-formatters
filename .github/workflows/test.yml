@@ -31,9 +31,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: 🪟 Install LLVM and Clang
+      - name: 🪟/🐧 Install LLVM and Clang
         uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' || runner.os == 'Linux'
         with:
           version: "22.1"
 
@@ -58,8 +58,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt update
-          sudo apt install -y --no-install-recommends lldb-19 python3
-          sudo update-alternatives --install /usr/bin/lldb python3 /usr/bin/lldb-19 20
+          # sudo apt install -y --no-install-recommends lldb-19 python3
+          sudo update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-22 20
           # sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3 20
           which python3
           python3 --version
@@ -81,7 +81,6 @@ jobs:
       - name: 🍏 Setup Python
         if: runner.os == 'macOS'
         run: |
-          brew install python@3.11
           export PYTHONPATH=`lldb -P`
           echo "PYTHONPATH=$PYTHONPATH" >> "$GITHUB_ENV"
           echo "$(dirname $(xcrun -f python3))" >> "$GITHUB_PATH"
