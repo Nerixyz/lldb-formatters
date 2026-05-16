@@ -65,6 +65,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/lldb-server lldb-server /usr/bin/lldb-server-22 10
           lldb --version
           which lldb-server
+          echo "LLDB_DEBUGSERVER_PATH=$(which lldb-server)" >> "$GITHUB_ENV"
           readlink -f /usr/bin/lldb-server-22
           echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
           which python3
@@ -74,14 +75,12 @@ jobs:
       - name: 🐧 Use GCC
         if: runner.os == 'Linux' && matrix.compiler == 'gcc'
         run: |
-          which lldb-server-22.1.6
           echo "CC=gcc" >> "$GITHUB_ENV"
           echo "CXX=g++" >> "$GITHUB_ENV"
 
       - name: 🐧 Use Clang
         if: runner.os == 'Linux' && matrix.compiler == 'clang'
         run: |
-          which lldb-server-22.1.6
           sudo apt install -y --no-install-recommends clang
           echo "CC=clang" >> "$GITHUB_ENV"
           echo "CXX=clang++" >> "$GITHUB_ENV"
@@ -130,10 +129,6 @@ jobs:
 
       - name: Build
         run: ninja -C build
-
-      - name: Setup tmate session
-        if: runner.os == 'Linux' && failure()
-        uses: mxschmitt/action-tmate@v3
 
       - name: Test
         working-directory: build
