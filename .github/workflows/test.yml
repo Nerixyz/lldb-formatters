@@ -11,7 +11,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
+        include:
+          - os: windows-latest
+          - os: macos-latest
+          - os: ubuntu-latest
+            compiler: clang
+          - os: ubuntu-latest
+            compiler: gcc
     name: 🧪 Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
@@ -29,6 +35,7 @@ jobs:
 
       - name: 🪟 🐛 Fix LLDB .pyd
         shell: powershell
+        if: runner.os == 'Windows'
         run: |
           mv "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.abi3None" "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.pyd"
 
@@ -38,9 +45,29 @@ jobs:
 
       - name: 🪟 Use clang-cl
         shell: bash
+        if: runner.os == 'Windows'
         run: |
           echo "CC=clang-cl" >> "$GITHUB_ENV"
           echo "CXX=clang-cl" >> "$GITHUB_ENV"
+
+      - name: 🐧 Install LLDB
+        if: runner.os == 'Linux'
+        run: |
+          apt update
+          apt install -y --no-install-recommends lldb
+
+      - name: 🐧 Use GCC
+        if: runner.os == 'Linux' && matrix.compiler == 'gcc'
+        run: |
+          echo "CC=gcc" >> "$GITHUB_ENV"
+          echo "CXX=g++" >> "$GITHUB_ENV"
+
+      - name: 🐧 Use Clang
+        if: runner.os == 'Linux' && matrix.compiler == 'clang'
+        run: |
+          apt install -y --no-install-recommends clang
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
 
       - name: Install Qt6
         uses: jurplel/install-qt-action@v4.3.1
