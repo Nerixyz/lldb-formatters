@@ -74,7 +74,7 @@ jobs:
           echo "CXX=clang++" >> "$GITHUB_ENV"
 
       - name: 🍏 Setup PYTHONPATH
-        if: runner.os == 'mac'
+        if: runner.os == 'macOS'
         run: |
           echo "PYTHONPATH=$(lldb -P)" >> "$GITHUB_ENV"
 
