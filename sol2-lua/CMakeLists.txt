@@ -1,5 +1,5 @@
 find_package(LuaWrap REQUIRED)
-find_package(sol2 REQUIRED)
+find_package(Sol2 REQUIRED)
 
 add_executable(sol2-lua-test
     src/Component.cpp
