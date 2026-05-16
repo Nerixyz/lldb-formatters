@@ -104,8 +104,17 @@ jobs:
           pip install conan
           conan profile detect -f
 
-      - name: Configure
+      - name: 🪟 Configure
+        if: runner.os == 'Windows'
         run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
+
+      - name: 🐧 Configure
+        if: runner.os == 'Linux'
+        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
+
+      - name: 🍏 Configure
+        if: runner.os == 'macOS'
+        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On -DPython3_PATH="$(dirname $(xcrun -f python3))"
 
       - name: Build
         run: ninja -C build
