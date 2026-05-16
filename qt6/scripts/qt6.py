@@ -1094,7 +1094,7 @@ class QHashPrivateNodeSyntheticProvider:
 
 
 class LazyType:
-    def __init__(self, tgt: SBTarget, names: str | tuple[str, ...]):
+    def __init__(self, tgt: SBTarget, names: Union[str, tuple[str, ...]]):
         self.tgt = tgt
         self.names = (names,) if isinstance(names, str) else names
         self.ty = None
