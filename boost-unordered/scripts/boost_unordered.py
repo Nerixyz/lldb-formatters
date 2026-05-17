@@ -355,7 +355,7 @@ def _countr_zero(n: int) -> int:
 
 def _needs_unwrap(e: SBType) -> bool:
     if e.IsTypedefType():
-        e = e.GetTypedefedType()
+        e = e.GetCanonicalType()
     return e.GetName().startswith("boost::unordered::detail::foa::element_type<")
 
 
@@ -364,4 +364,8 @@ def _unwrap_atomic(v: SBValue) -> int:
     res = v.GetValueAsUnsigned(err)
     if err.Success():
         return res
-    return v.Cast(v.GetType().FindDirectNestedType("value_type")).GetValueAsUnsigned()
+    ty = v.GetType()
+    vt = ty.FindDirectNestedType("value_type")
+    if not vt:
+        vt = ty.GetTemplateArgumentType(0)
+    return v.Cast(vt).GetValueAsUnsigned()
