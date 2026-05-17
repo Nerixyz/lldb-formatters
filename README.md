@@ -14,6 +14,14 @@ All tests use LLDB 22.
 Clone this repository.
 You don't need to configure or build anything if you only want to use the formatters.
 
+**Use All Formatters**
+
+```
+command script import path/to/scripts/all.py
+```
+
+**Use Individual Formatters**
+
 ```
 # Requried for all formatters
 command script import scripts/nerix_common.py
@@ -44,10 +52,7 @@ ctest
 
 - **Directory**: `qt6`
 - **Available Types**: See readme in [qt6/](./qt6/README.md#types).
-- **Install**:
-  ```sh
-  command script import <path-to>/qt6/scripts/qt6.py
-  ```
+- **Root Script**: [`qt6/scripts/qt6.py`](./qt6/scripts/qt6.py)
 
 > [!NOTE]
 >
@@ -61,7 +66,7 @@ ctest
 Both Lua and sol2 share the same Python file.
 
 - **Lua Version**: 5.4
-- **Directory**: `sol2-lua`
+- **Directory**: [`sol2-lua`](./sol2-lua/)
 - **Available Types**:
   - [x] `TValue`
   - [x] `TString`
@@ -76,10 +81,7 @@ Both Lua and sol2 share the same Python file.
   - [x] `sol::basic_table_core`
   - [x] `sol::basic_protected_function`
 
-- **Install**:
-  ```sh
-  command script import <path-to>/sol2-lua/scripts/lua.py
-  ```
+- **Root Script**: [`sol2-lua/scripts/lua.py`](./sol2-lua/scripts/lua.py)
 
 ### Boost.Unordered
 
@@ -90,10 +92,7 @@ Both Lua and sol2 share the same Python file.
   - [x] `boost::unordered::concurrent_(node|flat)_(map|set)`
   - [x] Map/Set iterators
 
-- **Install**:
-  ```sh
-  command script import <path-to>/boost-unordered/scripts/boost_unordered.py
-  ```
+- **Root Script**: [`boost-unordered/scripts/boost_unordered.py`](./boost-unordered/scripts/boost_unordered.py)
 
 ### Boost.Json
 
@@ -105,10 +104,7 @@ Both Lua and sol2 share the same Python file.
   - [x] `boost::json::string`
   - [x] `boost::json::key_value_pair`
 
-- **Install**:
-  ```sh
-  command script import <path-to>/boost-json/scripts/boost_json.py
-  ```
+- **Root Script**: [`boost-json/scripts/boost_json.py`](./boost-json/scripts/boost_json.py)
 
 ### Boost.CircularBuffer
 
@@ -118,10 +114,7 @@ Both Lua and sol2 share the same Python file.
   - [x] `boost::circular_buffer_space_optimized`
   - [x] Iterators
 
-- **Install**:
-  ```sh
-  command script import <path-to>/boost-circular-buffer/scripts/boost_circular_buffer.py
-  ```
+- **Root Script**: [`boost-circular-buffer/scripts/boost_circular_buffer.py`](./boost-circular-buffer/scripts/boost_circular_buffer.py)
 
 ### Rapidjson
 
@@ -129,7 +122,4 @@ Both Lua and sol2 share the same Python file.
 - **Available Types**:
   - [x] `rapidjson::GenericValue<*>`
 
-- **Install**:
-  ```sh
-  command script import <path-to>/rapidjson/scripts/rapidjson.py
-  ```
+- **Root Script**: [`rapidjson/scripts/rapidjson.py`](./rapidjson/scripts/rapidjson.py)
