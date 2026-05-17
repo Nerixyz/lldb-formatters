@@ -8,6 +8,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "CMAKE_COLOR_DIAGNOSTICS": true,
         "CMAKE_PROJECT_TOP_LEVEL_INCLUDES": "${sourceDir}/third-party/cmake-conan/conan_provider.cmake"
       }
     },
@@ -16,6 +17,14 @@
       "inherits": "base-debug",
       "cacheVariables": {
         "BUILD_TESTING": true
+      }
+    },
+    {
+      "name": "with-standalone-debug",
+      "inherits": "base-test-debug",
+      "cacheVariables": {
+        "CMAKE_C_FLAGS": "-fstandalone-debug",
+        "CMAKE_CXX_FLAGS": "-fstandalone-debug"
       }
     }
   ]

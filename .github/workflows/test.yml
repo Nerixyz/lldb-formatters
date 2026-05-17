@@ -22,9 +22,12 @@ jobs:
           # - os: macos-latest
           - os: ubuntu-24.04
             compiler: clang
+          - os: ubuntu-24.04
+            compiler: clang
+            preset: with-standalone-debug
           - os: ubuntu-latest
             compiler: gcc
-    name: 🧪 Test on ${{ matrix.os }}${{case(matrix.compiler == '', '', format(' with {0}', matrix.compiler))}}
+    name: 🧪 Test on ${{ matrix.os }}${{ case(matrix.compiler == '', '', format(' with {0}', matrix.compiler)) }}${{ case(matrix.preset == '', '', format(' [{0}]', matrix.preset)) }}
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -107,19 +110,20 @@ jobs:
 
       - name: 🪟 Configure
         if: runner.os == 'Windows'
-        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
+        run: cmake --preset ${{case(matrix.preset == '', 'base-test-debug', matrix.preset)}}
 
       - name: 🐧 Configure
         if: runner.os == 'Linux'
-        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
+        run: cmake --preset ${{case(matrix.preset == '', 'base-test-debug', matrix.preset)}}
 
       - name: 🍏 Configure
         if: runner.os == 'macOS'
         run: |
+          # The Qt install action sets up Python, but we want to use Xcode's Python.
           set -x
           unset Python3_ROOT_DIR
           unset Python_ROOT_DIR
-          cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On -DPython3_EXECUTABLE="$(xcrun -f python3)"
+          cmake --preset ${{case(matrix.preset == '', 'base-test-debug', matrix.preset)}} -DPython3_EXECUTABLE="$(xcrun -f python3)"
 
       - name: Build
         run: ninja -C build

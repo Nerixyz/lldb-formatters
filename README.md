@@ -52,8 +52,9 @@ ctest
 > [!NOTE]
 >
 > The QJson\* formatters require the `QJson{Array,Object,Value}` types to be available.
-> This might not always be the case.
+> This might not always be the case on Clang.
 > Check if the types are available using `type lookup QJsonArray`.
+> Otherwise, you can pass [`-fstandalone-debug`](https://clang.llvm.org/docs/ClangCommandLineReference.html#cmdoption-clang-fstandalone-debug) to Clang.
 
 ### Lua and Sol2
 
