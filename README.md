@@ -2,12 +2,24 @@
 
 This is a collection of formatters I use with LLDB. It's very much a WIP and used to test the native PDB parser.
 
-There is no test-suite yet, but I'd like to add one at some point. That would make it easier to upgrade versions of libraries.
+**Tested Platforms**
+
+All tests use LLDB 22.
+
+- Windows, clang-cl 22+, PDB/CodeView
+- Linux, Clang 21+ and GCC 15+
 
 ## Use
 
-Most libraries can be used by running `command script import <path-to-script>`.
-When running with lldb-dap, having `enableSyntheticChildDebugging` enabled helps a lot.
+Clone this repository.
+You don't need to configure or build anything if you only want to use the formatters.
+
+```
+# Requried for all formatters
+command script import scripts/nerix_common.py
+# For each library (see below)
+command script import <library-name>/scripts/<library_name>.py
+```
 
 > [!NOTE]
 >
@@ -16,6 +28,7 @@ When running with lldb-dap, having `enableSyntheticChildDebugging` enabled helps
 
 ## Test
 
+Make sure to clone the submodules (`git submodule update --init --recursive`).
 Use the `build-test-debug` preset to build and test the project:
 
 ```
