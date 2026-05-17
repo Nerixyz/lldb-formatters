@@ -17,16 +17,20 @@ jobs:
       matrix:
         include:
           - os: windows-latest
+
           # FIXME: macOS' LLDB seems to be too old for some features used here.
           # I don't have a Mac, so let's wait until that's updated.
           # - os: macos-latest
+
           - os: ubuntu-24.04
             compiler: clang
           - os: ubuntu-24.04
             compiler: clang
             preset: with-standalone-debug
-          - os: ubuntu-latest
+
+          - os: ubuntu-24.04
             compiler: gcc
+
     name: 🧪 Test on ${{ matrix.os }}${{ case(matrix.compiler == '', '', format(' with {0}', matrix.compiler)) }}${{ case(matrix.preset == '', '', format(' [{0}]', matrix.preset)) }}
     runs-on: ${{ matrix.os }}
 
