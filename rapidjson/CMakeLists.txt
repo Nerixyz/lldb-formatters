@@ -1,4 +1,4 @@
-find_package(rapidjson REQUIRED MODULE)
+find_package(Rapidjson REQUIRED MODULE)
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

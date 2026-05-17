@@ -20,7 +20,7 @@ import re
 import os
 import configuration
 from pathlib import Path
-from typing import Any
+from typing import Any, Union, Optional
 
 
 class TestCase(unittest.TestCase):
@@ -85,7 +85,7 @@ class TestCase(unittest.TestCase):
             output += "\nError output:\n" + self.res.GetError()
         self.assertTrue(self.res.Succeeded(), output)
 
-    def assertMatch(self, pattern: str | re.Pattern, target: str, msg=None):
+    def assertMatch(self, pattern: Union[str, re.Pattern], target: str, msg=None):
         if isinstance(pattern, re.Pattern):
             self.assertRegex(target, pattern, msg)
         else:
@@ -127,7 +127,9 @@ class TestCase(unittest.TestCase):
         self.assertEqual(len(threads), 1, "Expected exactly one thread to be stopped")
         return threads[0]
 
-    def runToRegex(self, pattern: str, source_spec: SBFileSpec | str = "test.cpp"):
+    def runToRegex(
+        self, pattern: str, source_spec: Union[SBFileSpec, str] = "test.cpp"
+    ):
         tgt = self._setupTarget()
         if isinstance(source_spec, str):
             source_spec = SBFileSpec(source_spec)
@@ -150,13 +152,13 @@ class ChildCheck:
 
 @dataclass
 class ValueCheck:
-    name: str | re.Pattern | None = None
-    summary: str | re.Pattern | None = None
-    value: str | re.Pattern | None = None
-    type: str | re.Pattern | None = None
+    name: Union[str, re.Pattern, None] = None
+    summary: Union[str, re.Pattern, None] = None
+    value: Union[str, re.Pattern, None] = None
+    type: Union[str, re.Pattern, None] = None
 
     # list[Any] should be list[T] where T: ChildCheck
-    children: list["ValueCheck"] | list[Any] | ChildCheck | None = None
+    children: Union[list["ValueCheck"], list[Any], ChildCheck, None] = None
 
     def check(self, test: TestCase, val: SBValue, error_msg=None):
         msg = (

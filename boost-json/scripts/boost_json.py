@@ -14,6 +14,7 @@ from nerix_common import (
     ExpandingSyntheticProvider,
     DispatchedSynthetic,
 )
+from typing import Union, Optional
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
@@ -102,7 +103,7 @@ class BArraySyntheticProvider(ArraySyntheticProvider):
         super().__init__(valobj, internal_dict)
         self._value_ty = valobj.GetTarget().FindFirstType("boost::json::value")
 
-    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue | int, int]:
+    def _pointer_and_size(self, valobj: SBValue) -> tuple[Union[SBValue, int], int]:
         tbl: SBValue = valobj.GetChildMemberWithName("t_")
         s = tbl.GetChildMemberWithName("size").GetValueAsUnsigned()
         return tbl.GetValueAsAddress() + 8, s
@@ -130,23 +131,23 @@ class Kind:
         k = tgt.FindFirstType("boost::json::kind").GetEnumMembers()
         for it in k:
             v = it.GetValueAsUnsigned()
-            match it.GetName():
-                case "null":
-                    Kind.Null = v
-                case "bool_":
-                    Kind.Bool = v
-                case "int64":
-                    Kind.Int64 = v
-                case "uint64":
-                    Kind.Uint64 = v
-                case "double_":
-                    Kind.Double = v
-                case "string":
-                    Kind.String = v
-                case "array":
-                    Kind.Array = v
-                case "object":
-                    Kind.Object = v
+            name = it.GetName()
+            if name == "null":
+                Kind.Null = v
+            elif name == "bool_":
+                Kind.Bool = v
+            elif name == "int64":
+                Kind.Int64 = v
+            elif name == "uint64":
+                Kind.Uint64 = v
+            elif name == "double_":
+                Kind.Double = v
+            elif name == "string":
+                Kind.String = v
+            elif name == "array":
+                Kind.Array = v
+            elif name == "object":
+                Kind.Object = v
 
 
 def ValueSummaryProvider(
@@ -173,27 +174,27 @@ class ValueSyntheticProvider(ExpandingSyntheticProvider):
             return self._val
         return super().get_child_at_index(idx)
 
-    def _get_value(self, valobj: SBValue) -> SBValue | None:
+    def _get_value(self, valobj: SBValue) -> Optional[SBValue]:
         u: SBValue = valobj.GetChildAtIndex(0)
         sca: SBValue = u.GetChildMemberWithName("sca_")
         kind = sca.GetChildMemberWithName("k").GetValueAsUnsigned()
-        match kind & 0xF:
-            case Kind.Null:
-                return None
-            case Kind.Bool:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("b")
-            case Kind.Int64:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("i")
-            case Kind.Uint64:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("u")
-            case Kind.Double:
-                return sca.GetChildAtIndex(2).GetChildMemberWithName("d")
-            case Kind.String:
-                return u.GetChildMemberWithName("str_")
-            case Kind.Array:
-                return u.GetChildMemberWithName("arr_").GetSyntheticValue()
-            case Kind.Object:
-                return u.GetChildMemberWithName("obj_").GetSyntheticValue()
+        kind_tag = kind & 0xF
+        if kind_tag == Kind.Null:
+            return None
+        elif kind_tag == Kind.Bool:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("b")
+        elif kind_tag == Kind.Int64:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("i")
+        elif kind_tag == Kind.Uint64:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("u")
+        elif kind_tag == Kind.Double:
+            return sca.GetChildAtIndex(2).GetChildMemberWithName("d")
+        elif kind_tag == Kind.String:
+            return u.GetChildMemberWithName("str_")
+        elif kind_tag == Kind.Array:
+            return u.GetChildMemberWithName("arr_").GetSyntheticValue()
+        elif kind_tag == Kind.Object:
+            return u.GetChildMemberWithName("obj_").GetSyntheticValue()
 
     def get_value(self):
         return self._val

@@ -17,7 +17,7 @@ from nerix_common import (
     make_add_synthetic,
     numeric_index,
 )
-import typing
+from typing import Optional, Generator
 
 
 def __lldb_init_module(dbg: SBDebugger, internal_dict):
@@ -65,11 +65,11 @@ class CachedGeneratorProvider:
         self._reset()
 
     def _reset(self):
-        self._gen: typing.Generator[SBValue] | None = None
+        self._gen: Optional[Generator[SBValue]] = None
         self._size = 0
         self._cached: list[SBValue] = []
 
-    def _make_generator(self) -> typing.Generator[SBValue, None, None]:
+    def _make_generator(self) -> Generator[SBValue, None, None]:
         raise NotImplementedError()
 
     def get_child_index(self, name: str):
@@ -110,7 +110,7 @@ class UnorderedMapSyntheticProvider(CachedGeneratorProvider):
         self._valobj = valobj
         self._table = SBValue()
 
-    def _make_generator(self) -> typing.Generator[SBValue, None, None]:
+    def _make_generator(self) -> Generator[SBValue, None, None]:
         def gen():
             buckets = self._table.GetChildMemberWithName("buckets_")
             inner_size = buckets.GetChildMemberWithName("size_").GetValueAsUnsigned()
@@ -184,7 +184,7 @@ def FcaIteratorSummaryProvider(
 
 
 class FcaIteratorSyntheticProvider(ExpandingSyntheticProvider):
-    def _get_value(self, valobj: SBValue) -> SBValue | None:
+    def _get_value(self, valobj: SBValue) -> Optional[SBValue]:
         p = valobj.GetChildMemberWithName("p")
         if (
             p.GetValueAsAddress() == 0
@@ -237,7 +237,7 @@ class UnorderedFoaSyntheticProvider(CachedGeneratorProvider):
             and (at(1) & 0x4000400040004000) == 0
         )
 
-    def _make_generator(self) -> typing.Generator[SBValue, None, None]:
+    def _make_generator(self) -> Generator[SBValue, None, None]:
         def gen():
             arrays = self._table.GetChildMemberWithName("arrays")
             arrays.SetPreferSyntheticValue(False)
@@ -326,7 +326,7 @@ def FoaIteratorSummaryProvider(
 
 
 class FoaIteratorSyntheticProvider(ExpandingSyntheticProvider):
-    def _get_value(self, valobj: SBValue) -> SBValue | None:
+    def _get_value(self, valobj: SBValue) -> Optional[SBValue]:
         p = valobj.GetChildMemberWithName("p_")
         if (
             p.GetValueAsAddress() == 0
@@ -339,7 +339,7 @@ class FoaIteratorSyntheticProvider(ExpandingSyntheticProvider):
         return self._val
 
 
-def _get_field_by_name(ty: SBType, n: str) -> SBTypeMember | None:
+def _get_field_by_name(ty: SBType, n: str) -> Optional[SBTypeMember]:
     for i in range(ty.GetNumberOfFields()):
         f = ty.GetFieldAtIndex(i)
         if f.GetName() == n:
@@ -355,7 +355,7 @@ def _countr_zero(n: int) -> int:
 
 def _needs_unwrap(e: SBType) -> bool:
     if e.IsTypedefType():
-        e = e.GetTypedefedType()
+        e = e.GetCanonicalType()
     return e.GetName().startswith("boost::unordered::detail::foa::element_type<")
 
 
@@ -364,4 +364,8 @@ def _unwrap_atomic(v: SBValue) -> int:
     res = v.GetValueAsUnsigned(err)
     if err.Success():
         return res
-    return v.Cast(v.GetType().FindDirectNestedType("value_type")).GetValueAsUnsigned()
+    ty = v.GetType()
+    vt = ty.FindDirectNestedType("value_type")
+    if not vt:
+        vt = ty.GetTemplateArgumentType(0)
+    return v.Cast(vt).GetValueAsUnsigned()

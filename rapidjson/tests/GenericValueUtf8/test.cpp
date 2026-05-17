@@ -7,8 +7,8 @@ int main()
     rapidjson::Value empty;
     rapidjson::Value vInt(1234);
     rapidjson::Value vUint(1234u);
-    rapidjson::Value vInt64(1234LL);
-    rapidjson::Value vUint64(1234ULL);
+    rapidjson::Value vInt64(static_cast<int64_t>(1234));
+    rapidjson::Value vUint64(static_cast<uint64_t>(1234));
     rapidjson::Value vDouble(1.25);
     rapidjson::Value vTrue(true);
     rapidjson::Value vFalse(false);
@@ -18,8 +18,8 @@ int main()
 
     rapidjson::Value vArray(rapidjson::kArrayType);
     vArray.PushBack(rapidjson::kNullType, alloc);
-    vArray.PushBack(1234, alloc);
-    vArray.PushBack(1234u, alloc);
+    vArray.PushBack(static_cast<int64_t>(1234), alloc);
+    vArray.PushBack(static_cast<uint64_t>(1234), alloc);
     vArray.PushBack(-1234, alloc);
     vArray.PushBack(true, alloc);
     vArray.PushBack(false, alloc);
@@ -40,8 +40,8 @@ int main()
     vObject.AddMember("int", 123, alloc);
     vObject.AddMember("null", rapidjson::kNullType, alloc);
     vObject.AddMember("uint", 456u, alloc);
-    vObject.AddMember("int64", 123LL, alloc);
-    vObject.AddMember("uint64", 123ULL, alloc);
+    vObject.AddMember("int64", static_cast<int64_t>(123), alloc);
+    vObject.AddMember("uint64", static_cast<uint64_t>(123), alloc);
     vObject.AddMember("double", 1.25, alloc);
     vObject.AddMember("true", true, alloc);
     vObject.AddMember("false", false, alloc);

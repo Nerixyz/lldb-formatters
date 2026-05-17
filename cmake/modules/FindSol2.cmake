@@ -2,10 +2,10 @@ include(FindPackageHandleStandardArgs)
 
 set(_sol2_include_dir "${CMAKE_SOURCE_DIR}/third-party/sol2/include")
 
-find_package_handle_standard_args(sol2 DEFAULT_MSG _sol2_include_dir)
+find_package_handle_standard_args(Sol2 DEFAULT_MSG _sol2_include_dir)
 
 # Same as in Chatterino
-if (sol2_FOUND)
+if (Sol2_FOUND)
     add_library(sol2 INTERFACE IMPORTED)
     set_target_properties(sol2 PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${_sol2_include_dir}"

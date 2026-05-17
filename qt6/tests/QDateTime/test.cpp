@@ -12,8 +12,8 @@ int main()
                          QTimeZone::fromSecondsAheadOfUtc(-60 * 60));
     auto negative =
         QDateTime::fromMSecsSinceEpoch(-12345678500, QTimeZone::utc());
-    auto invalidZone = QDateTime::currentDateTimeUtc().toTimeZone(
-        QTimeZone("Antarctica/Troll"));
+    auto invalidZone =
+        QDateTime::currentDateTimeUtc().toTimeZone(QTimeZone("InvalidZone"));
 
     qDebug() << null;
     qDebug() << utc;

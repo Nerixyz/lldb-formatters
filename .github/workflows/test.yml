@@ -1,5 +1,9 @@
 name: Test
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
   push:
@@ -11,8 +15,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
-    name: 🧪 Test on ${{ matrix.os }}
+        include:
+          - os: windows-latest
+
+          # FIXME: macOS' LLDB seems to be too old for some features used here.
+          # I don't have a Mac, so let's wait until that's updated.
+          # - os: macos-latest
+
+          - os: ubuntu-24.04
+            compiler: clang
+          - os: ubuntu-24.04
+            compiler: clang
+            preset: with-standalone-debug
+
+          - os: ubuntu-24.04
+            compiler: gcc
+
+    name: 🧪 Test on ${{ matrix.os }}${{ case(matrix.compiler == '', '', format(' with {0}', matrix.compiler)) }}${{ case(matrix.preset == '', '', format(' [{0}]', matrix.preset)) }}
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -29,6 +48,7 @@ jobs:
 
       - name: 🪟 🐛 Fix LLDB .pyd
         shell: powershell
+        if: runner.os == 'Windows'
         run: |
           mv "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.abi3None" "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.pyd"
 
@@ -38,9 +58,40 @@ jobs:
 
       - name: 🪟 Use clang-cl
         shell: bash
+        if: runner.os == 'Windows'
         run: |
           echo "CC=clang-cl" >> "$GITHUB_ENV"
           echo "CXX=clang-cl" >> "$GITHUB_ENV"
+
+      - name: 🐧 Install LLDB
+        if: runner.os == 'Linux'
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main'
+          sudo apt update
+          sudo apt install lldb-22
+          sudo update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-22 10
+          echo "LLDB_DEBUGSERVER_PATH=$(which lldb-server-22)" >> "$GITHUB_ENV"
+
+      - name: 🐧 Use GCC
+        if: runner.os == 'Linux' && matrix.compiler == 'gcc'
+        run: |
+          echo "CC=gcc" >> "$GITHUB_ENV"
+          echo "CXX=g++" >> "$GITHUB_ENV"
+
+      - name: 🐧 Use Clang
+        if: runner.os == 'Linux' && matrix.compiler == 'clang'
+        run: |
+          sudo apt install -y --no-install-recommends clang
+          echo "CC=clang" >> "$GITHUB_ENV"
+          echo "CXX=clang++" >> "$GITHUB_ENV"
+
+      - name: 🍏 Setup Python
+        if: runner.os == 'macOS'
+        run: |
+          export PYTHONPATH=`lldb -P`
+          echo "PYTHONPATH=$PYTHONPATH" >> "$GITHUB_ENV"
+          echo "$(dirname $(xcrun -f python3))" >> "$GITHUB_PATH"
 
       - name: Install Qt6
         uses: jurplel/install-qt-action@v4.3.1
@@ -61,8 +112,22 @@ jobs:
           pip install conan
           conan profile detect -f
 
-      - name: Configure
-        run: cmake --preset base-test-debug -DCMAKE_COLOR_DIAGNOSTICS=On
+      - name: 🪟 Configure
+        if: runner.os == 'Windows'
+        run: cmake --preset ${{case(matrix.preset == '', 'base-test-debug', matrix.preset)}}
+
+      - name: 🐧 Configure
+        if: runner.os == 'Linux'
+        run: cmake --preset ${{case(matrix.preset == '', 'base-test-debug', matrix.preset)}}
+
+      - name: 🍏 Configure
+        if: runner.os == 'macOS'
+        run: |
+          # The Qt install action sets up Python, but we want to use Xcode's Python.
+          set -x
+          unset Python3_ROOT_DIR
+          unset Python_ROOT_DIR
+          cmake --preset ${{case(matrix.preset == '', 'base-test-debug', matrix.preset)}} -DPython3_EXECUTABLE="$(xcrun -f python3)"
 
       - name: Build
         run: ninja -C build

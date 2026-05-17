@@ -6,6 +6,11 @@ import re
 class TestQJsonValueConstRef(testlib.TestCase):
     def runTest(self):
         self.runToRegex("// break here")
+
+        tgt = self.target()
+        if not tgt.FindFirstType("QJsonArray") or not tgt.FindFirstType("QJsonObject") or not tgt.FindFirstType("QJsonValue"):
+            self.skipTest("QJson* types are not available")
+
         arrCheck = ValueCheck(
             summary="[ size=6 ]",
             children=[

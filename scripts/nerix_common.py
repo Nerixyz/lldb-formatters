@@ -1,11 +1,12 @@
 from typing import Callable
 import lldb
 from lldb import SBDebugger, SBValue, SBTarget, SBType
+from typing import Union, Optional
 
 
 def make_add_summary_string(dbg: SBDebugger, category: str):
     def add_summary_string(
-        type_names: str | list[str],
+        type_names: Union[str, list[str]],
         summary: str,
         *,
         regex=False,
@@ -22,7 +23,7 @@ def make_add_summary_string(dbg: SBDebugger, category: str):
 
 def make_add_summary(dbg: SBDebugger, category: str, modname: str, *, include_own=True):
     def add_summary(
-        type_name: str, *, regex: str | None = None, other_names: list[str] = []
+        type_name: str, *, regex: Optional[str] = None, other_names: list[str] = []
     ):
         type_names = other_names + ([type_name] if include_own else [])
         cmd = f"type summary add -w {category} -F {modname}.{type_name}SummaryProvider "
@@ -39,8 +40,8 @@ def make_add_synthetic(dbg: SBDebugger, category: str, modname: str):
     def add_synthetic(
         name: str,
         *,
-        regex: str | None = None,
-        type_name: str | None = None,
+        regex: Optional[str] = None,
+        type_name: Optional[str] = None,
         other_names: list[str] = [],
     ):
         cmd = f"type synthetic add -w {category} -l {modname}.{name}SyntheticProvider"
@@ -54,7 +55,7 @@ def make_add_synthetic(dbg: SBDebugger, category: str, modname: str):
     return add_synthetic
 
 
-def numeric_index(name: str) -> int | None:
+def numeric_index(name: str) -> Optional[int]:
     name = name.removeprefix("[").removesuffix("]")
     try:
         return int(name)
@@ -71,7 +72,7 @@ class ExpandingSyntheticProvider:
         self._val = self._get_value(self._backend)
         return False
 
-    def _get_value(self, valobj: SBValue) -> SBValue | None:
+    def _get_value(self, valobj: SBValue) -> Optional[SBValue]:
         raise NotImplementedError()
 
     def num_children(self):
@@ -94,7 +95,7 @@ class ExpandingSyntheticProvider:
 
 
 class DispatchedSynthetic:
-    items: list[tuple[str, Callable | str]] = []
+    items: list[tuple[str, Union[Callable, str]]] = []
 
     def __init__(self, valobj: SBValue, internal_dict):
         self._valobj = valobj
@@ -174,7 +175,7 @@ class ArraySyntheticProvider:
         self._offset = self._resolved_type.GetByteSize()
         return False
 
-    def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue | int, int]:
+    def _pointer_and_size(self, valobj: SBValue) -> tuple[Union[SBValue, int], int]:
         raise NotImplementedError()
 
     def _array_type(self, valobj: SBValue) -> SBType:
@@ -182,7 +183,7 @@ class ArraySyntheticProvider:
 
 
 class LazyType:
-    def __init__(self, tgt: SBTarget, names: str | tuple[str, ...]):
+    def __init__(self, tgt: SBTarget, names: Union[str, tuple[str, ...]]):
         self.tgt = tgt
         self.names = (names,) if isinstance(names, str) else names
         self.ty = None

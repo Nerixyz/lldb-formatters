@@ -6,6 +6,11 @@ import re
 class TestQJsonDocument(testlib.TestCase):
     def runTest(self):
         self.runToRegex("// break here")
+
+        tgt = self.target()
+        if not tgt.FindFirstType("QJsonArray") or not tgt.FindFirstType("QJsonObject") or not tgt.FindFirstType("QJsonValue"):
+            self.skipTest("QJson* types are not available")
+
         self.assertVarPath("docEmpty", ValueCheck(summary="null", children=[]))
         an_array_children = [
             ValueCheck(name="[0]", summary='"foo"'),
