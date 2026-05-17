@@ -413,7 +413,10 @@ QCharSyntheticProvider = _FirstChildSyntheticProvider
 class QFlagsSyntheticProvider(lldb.SBSyntheticValueProvider):
     def __init__(self, valobj: SBValue, internal_dict):
         self._backend = valobj
-        self._enum_type = valobj.type.FindDirectNestedType("enum_type")
+        ty = valobj.GetType().GetCanonicalType()
+        self._enum_type = ty.FindDirectNestedType("enum_type")
+        if not self._enum_type:
+            self._enum_type = ty.GetTemplateArgumentType(0)
 
     def update(self):
         self._val = self._backend.GetChildMemberWithName("i").Cast(self._enum_type)
@@ -437,9 +440,11 @@ class QBasicAtomicIntegerSyntheticProvider(lldb.SBSyntheticValueProvider):
         self._backend = valobj
 
     def update(self):
-        self._val = (
-            self._backend.GetChildAtIndex(0).GetSyntheticValue().GetChildAtIndex(0)
-        )
+        base = self._backend.GetChildAtIndex(0).GetSyntheticValue()
+        self._val = base.GetChildMemberWithName("Value")
+        if not self._val:
+            # FIXME: libstdc++ doesn't have synthetic children for std::atomic
+            self._val = base.GetChildAtIndex(0).GetChildAtIndex(0)
         return False
 
     def get_value(self):
@@ -622,6 +627,8 @@ class QVarLengthArraySyntheticProvider(_ArraySyntheticProvider):
         self._arr_type = valobj.type.FindDirectNestedType(
             "value_type"
         ).GetTypedefedType()
+        if not self._arr_type:
+            self._arr_type = valobj.GetType().GetCanonicalType().GetTemplateArgumentType(0)
 
     def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue, int]:
         ptr = valobj.GetChildMemberWithName("ptr").Cast(self._arr_type.GetPointerType())
@@ -995,6 +1002,8 @@ class QHashSyntheticProvider:
     def update(self):
         d: SBValue = self._valobj.GetChildMemberWithName("d")
         self._node_ty = self._valobj.type.FindDirectNestedType("Node")
+        if not self._node_ty:
+            self._node_ty = d.GetType().GetPointeeType().GetCanonicalType().GetTemplateArgumentType(0)
         self._size = d.GetChildMemberWithName("size").unsigned
         self._num_buckets = d.GetChildMemberWithName("numBuckets").unsigned
         self._spans: SBValue = d.GetChildMemberWithName("spans")
@@ -1138,7 +1147,7 @@ class _CborContainerSyntheticProviderBase:
         self._array_ty = LazyType(self._target, ("QJsonArray", "QCborArray"))
         self._map_ty = LazyType(self._target, ("QJsonObject", "QCborMap"))
         self._barray_ty = LazyType(self._target, "QByteArray")
-        self._qcborval_ty = LazyType(self._target, "QCborValue")
+        self._qcborval_ty = LazyType(self._target, ("QCborValue", "QJsonValue"))
 
     def num_children(self):
         return self._size
@@ -1238,13 +1247,6 @@ class _CborContainerSyntheticProviderBase:
             return _valobj_from_str(self._valobj, "Unsupported UUID")
         else:
             return _valobj_from_str(self._valobj, f"Unknown cbor type {ty:x}")
-
-        if self._typ == QCborValueType.Array:
-            return self._map_el(idx)
-
-        assert self._typ == QCborValueType.Map
-        key = self._get_string_at(idx * 2).summary
-        return self._map_el(idx * 2 + 1).Clone(f"[{key}]")
 
     def update(self):
         self._size = 0
@@ -2069,7 +2071,8 @@ def QImageSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
-    if raw.GetChildMemberWithName("d").GetValueAsAddress() == 0:
+    d, d_addr = QImageSyntheticProvider._get_d_and_address(raw)
+    if d_addr == 0:
         return "(null)"
     w = valobj.GetChildAtIndex(QImageSyntheticProvider.WIDTH_INDEX).GetValueAsSigned()
     h = valobj.GetChildAtIndex(QImageSyntheticProvider.HEIGHT_INDEX).GetValueAsSigned()
@@ -2144,6 +2147,20 @@ class QImageSyntheticProvider:
 
     def has_children(self):
         return True
+    
+    @staticmethod
+    def _get_d_and_address(valobj: SBValue):
+        d = valobj.GetChildMemberWithName("d")
+        if d:
+            return d, d.GetValueAsAddress()
+        elif valobj.GetTarget().GetAddressByteSize() == 8:
+            sz = valobj.GetType().GetByteSize()
+            if sz == 0:
+                # Clang doesn't include the type size
+                sz = 24
+            d_off = sz - 8
+            return d, valobj.GetProcess().ReadPointerFromMemory(valobj.GetLoadAddress() + d_off, SBError())
+        return d, 0
 
     def update(self):
         self._width = None
@@ -2154,8 +2171,8 @@ class QImageSyntheticProvider:
         self._stride = None
         self._dpr = None
 
-        d = self._valobj.GetChildMemberWithName("d")
-        d_addr = d.GetValueAsAddress()
+        d, d_addr = QImageSyntheticProvider._get_d_and_address(self._valobj)
+
         if d_addr == 0:
             return  # null image
         if self._has_priv:
@@ -2407,6 +2424,14 @@ class QUrlSyntheticProvider:
 
     def has_children(self):
         return True
+    
+    @staticmethod
+    def _get_d_address(valobj: SBValue):
+        d = valobj.GetChildMemberWithName("d")
+        if d:
+            return d.GetValueAsAddress()
+        else:
+            return valobj.GetProcess().ReadPointerFromMemory(valobj.GetLoadAddress(), SBError())
 
     def update(self):
         self._scheme = None
@@ -2419,7 +2444,7 @@ class QUrlSyntheticProvider:
         self._fragment = None
         self._combined = None
 
-        d_addr = self._valobj.GetChildMemberWithName("d").GetValueAsAddress()
+        d_addr = QUrlSyntheticProvider._get_d_address(self._valobj)
         if d_addr == 0:
             return
 
@@ -2445,8 +2470,6 @@ class QUrlSyntheticProvider:
         flags = self._process.ReadUnsignedFromMemory(
             d_addr + 2 * 4 + 7 * 3 * self._ptr_size + self._ptr_size + 1, 1, SBError()
         )
-        if 2 * 4 + 7 * 3 * self._ptr_size + self._ptr_size + 1 != 185:
-            print("XXXXXXXX")
 
         url = ""
         if scheme:

@@ -38,7 +38,9 @@ ctest
 
 > [!NOTE]
 >
-> Some formatters, most notably the ones for the `QDateTime` type, require Qt to be compiled with debug info. On Windows, add the debug info files when installing and use `settings append target.debug-file-search-paths <path-to>/msvc2022_64/bin` to add the files to the search path.
+> The QJson\* formatters require the `QJson{Array,Object,Value}` types to be available.
+> This might not always be the case.
+> Check if the types are available using `type lookup QJsonArray`.
 
 ### Lua and Sol2
 

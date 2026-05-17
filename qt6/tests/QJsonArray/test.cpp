@@ -35,6 +35,7 @@ int main()
             },
         },
     };
+    empty.empty();
 
     return 0;  // break here
 }

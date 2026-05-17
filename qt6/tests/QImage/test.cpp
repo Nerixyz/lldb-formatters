@@ -1,3 +1,4 @@
+#include <qimage.h>
 #include <QImage>
 
 int main()
