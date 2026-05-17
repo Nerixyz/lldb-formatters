@@ -567,16 +567,21 @@ class QStringSyntheticProvider(_ArraySyntheticProvider):
 class QSpanSyntheticProvider(_ArraySyntheticProvider):
     def __init__(self, valobj: SBValue, internal_dict):
         super().__init__(valobj, internal_dict)
-        f = (
-            valobj.GetType()
-            .GetDirectBaseClassAtIndex(0)
-            .GetType()
-            .GetStaticFieldWithName("m_size")
-        )
-        if f:
-            self._csize = f.GetConstantValue(valobj.GetTarget()).GetValueAsUnsigned()
-        else:
+        has_size = bool(valobj.GetChildMemberWithName("m_size"))
+        if has_size:
             self._csize = None
+        else:
+            ty = valobj.GetType().GetCanonicalType()
+            f = (
+                ty
+                .GetDirectBaseClassAtIndex(0)
+                .GetType()
+                .GetStaticFieldWithName("m_size")
+            )
+            if f:
+                self._csize = f.GetConstantValue(valobj.GetTarget()).GetValueAsUnsigned()
+            else:
+                self._csize = ty.GetTemplateArgumentValue(valobj.GetTarget(),1).GetValueAsUnsigned()
 
     def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue, int]:
         ptr: SBValue = valobj.GetChildMemberWithName("m_data")
