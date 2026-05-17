@@ -111,7 +111,7 @@ def StringSummary(data: SBValue, flags: Optional[int] = None):
 
     if flags == Flags.kShortStringFlag:
         arr = data.GetChildMemberWithName("ss").GetChildMemberWithName("str")
-        ptr = arr.GetType().GetArrayElementType().GetPointerType()
+        ptr = arr.GetType().GetArrayElementType().GetCanonicalType().GetPointerType()
         return arr.AddressOf().Cast(ptr).GetSummary()
 
     s = data.GetChildMemberWithName("s")
