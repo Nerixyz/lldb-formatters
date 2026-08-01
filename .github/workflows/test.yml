@@ -101,7 +101,7 @@ jobs:
           version: 6.10.3
 
       - name: 🪟 Install Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
 
         if: runner.os == 'Windows'
         with:
