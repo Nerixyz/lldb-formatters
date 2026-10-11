@@ -43,16 +43,10 @@ jobs:
           persist-credentials: false
 
       - name: 🪟 Install LLVM and Clang
-        uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
+        uses: Nerixyz/install-llvm-action@862e3feb913470afc27f2303d756c3e1ccd9c131
         if: runner.os == 'Windows'
         with:
-          version: "22.1"
-
-      - name: 🪟 🐛 Fix LLDB .pyd
-        shell: powershell
-        if: runner.os == 'Windows'
-        run: |
-          mv "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.abi3None" "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.pyd"
+          version: 23
 
       - name: 🪟 Enable Developer Command Prompt
         if: runner.os == 'Windows'
@@ -69,11 +63,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main'
+          sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-23 main'
           sudo apt update
-          sudo apt install lldb-22
-          sudo update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-22 10
-          echo "LLDB_DEBUGSERVER_PATH=$(which lldb-server-22)" >> "$GITHUB_ENV"
+          sudo apt install lldb-23
+          sudo update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-23 10
+          echo "LLDB_DEBUGSERVER_PATH=$(which lldb-server-23)" >> "$GITHUB_ENV"
 
       - name: 🐧 Use GCC
         if: runner.os == 'Linux' && matrix.compiler == 'gcc'
@@ -102,16 +96,16 @@ jobs:
           cache-key-prefix: ${{ runner.os }}-Qt
           version: 6.10.3
 
-      - name: 🪟 Install Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      # - name: 🪟 Install Python
+      #   uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
 
-        if: runner.os == 'Windows'
-        with:
-          python-version: "3.11" # Matches the python used in LLDB
+      #   if: runner.os == 'Windows'
+      #   with:
+      #     python-version: "3.11"
 
       - name: Install conan
         run: |
-          pip install conan
+          pip install "conan==2.26.0"
           conan profile detect -f
 
       - name: 🪟 Configure
