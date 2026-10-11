@@ -133,3 +133,12 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest -j2 --output-on-failure
+
+  collect:
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - run: jq --exit-status 'all(.result == "success")' <<< '${{ toJson(needs) }}'
+      - name: Done
+        run: exit 0
