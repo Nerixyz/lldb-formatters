@@ -108,6 +108,12 @@ jobs:
           pip install "conan==2.33.0"
           conan profile detect -f
 
+      - name: 🪟 Fixup conan
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          sed -i 's/v143/v145/g' "$(conan profile path default)"
+
       - name: 🪟 Configure
         if: runner.os == 'Windows'
         run: cmake --preset ${{case(matrix.preset == '', 'base-test-debug', matrix.preset)}}
