@@ -18,6 +18,7 @@ create_python_tests(
         QByteArray
         QChar
         QCheckedInt
+        QColor
         QDate
         QDateTime
         QDir
@@ -59,4 +60,10 @@ create_python_tests(
         QUuid
         QVariant
         QVarLengthArray
+)
+
+add_test(
+    NAME "qt6-qfloat16-py"
+    COMMAND
+        "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../scripts/qfloat16.py"
 )
