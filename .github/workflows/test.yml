@@ -43,7 +43,7 @@ jobs:
           persist-credentials: false
 
       - name: 🪟 Install LLVM and Clang
-        uses: Nerixyz/install-llvm-action@862e3feb913470afc27f2303d756c3e1ccd9c131
+        uses: Nerixyz/install-llvm-action@7372aab026498959cff47c82953ba378477d4b00
         if: runner.os == 'Windows'
         with:
           version: "23.1"
