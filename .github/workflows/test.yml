@@ -110,9 +110,10 @@ jobs:
 
       - name: 🪟 Fixup conan
         if: runner.os == 'Windows'
-        shell: bash
+        shell: powershell
         run: |
-          sed -i 's/v143/v145/g' "$(conan profile path default)"
+          $file = "$(conan profile path default)"
+          (Get-Content -Path $file) -replace "v143", "v145" | Set-Content $file
 
       - name: 🪟 Configure
         if: runner.os == 'Windows'

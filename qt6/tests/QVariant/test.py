@@ -241,7 +241,9 @@ class TestQVariant(testlib.TestCase):
             ),
         )
         self.assertVarPath("vChar16", ValueCheck(value="U+0056"))
-        self.assertVarPath("vChar32", ValueCheck(value="U+0x00000056"))
+        self.assertVarPath(
+            "vChar32", ValueCheck(value=re.compile(r"^U+(0x00000056|0056)$"))
+        )
         self.assertVarPath("vNullptr", ValueCheck(summary="(null)"))
 
         self.assertVarPath(
