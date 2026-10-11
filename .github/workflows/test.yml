@@ -105,7 +105,7 @@ jobs:
 
       - name: Install conan
         run: |
-          pip install "conan==2.26.0"
+          pip install "conan==2.30.0"
           conan profile detect -f
 
       - name: 🪟 Configure
