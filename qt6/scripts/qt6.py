@@ -14,9 +14,11 @@ from qt_constants import (
     QHashConstants,
     QCborValueType,
     QtCborElementValueFlag,
+    QColorSpec,
     QCBORVALUE_NULL,
     QCBORVALUE_UNDEFINED,
 )
+from qfloat16 import f16_to_float
 import datetime
 import re
 
@@ -80,6 +82,7 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("QObject")
     add_summary("QUrl")
     add_summary("QGenericMatrix", regex="^QGenericMatrix<.*>$")
+    add_summary("QColor")
     _add_summary_string(dbg, ["QPoint", "QPointF"], "(x: ${var.xp}, y: ${var.yp})")
     _add_summary_string(dbg, ["QPolygon", "QPolygonF"], "size=${svar%#}")
     _add_summary_string(dbg, "^QList<.*>$", "size=${svar%#}", regex=True)
@@ -320,6 +323,79 @@ def QDateTimeSummaryProvider(
     if is_local:
         return dt.strftime(f"%Y-%m-%d %X{ms_part} (Local)")
     return dt.strftime(f"%Y-%m-%d %X{ms_part} %Z")
+
+
+def QColorSummaryProvider(
+    valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
+) -> Optional[str]:
+    spec = valobj.GetChildMemberWithName("cspec").GetValueAsUnsigned()
+    ct = valobj.GetChildMemberWithName("ct")
+
+    def div257_floor(x: int) -> int:
+        return (x - (x >> 8)) >> 8
+
+    def div257(v: SBValue) -> int:
+        return div257_floor(v.GetValueAsUnsigned() + 128)
+
+    match spec:
+        case QColorSpec.Invalid:
+            return "invalid"
+        case QColorSpec.Rgb:
+            argb = ct.GetChildMemberWithName("argb")
+            a = div257(argb.GetChildMemberWithName("alpha"))
+            r = div257(argb.GetChildMemberWithName("red"))
+            g = div257(argb.GetChildMemberWithName("green"))
+            b = div257(argb.GetChildMemberWithName("blue"))
+            if a != 255:
+                return f"rgba({r}, {g}, {b}, {a})"
+            return f"rgb({r}, {g}, {b})"
+        case QColorSpec.Hsv:
+            hsv = ct.GetChildMemberWithName("ahsv")
+            a = div257(hsv.GetChildMemberWithName("alpha"))
+            h = hsv.GetChildMemberWithName("hue").GetValueAsUnsigned()
+            h = -1 if h == 0xFFFF else int(h / 100)
+            s = div257(hsv.GetChildMemberWithName("saturation"))
+            v = div257(hsv.GetChildMemberWithName("value"))
+            if a != 255:
+                return f"hsva({h}, {s}, {v}, {a})"
+            return f"hsv({h}, {s}, {v})"
+        case QColorSpec.Cmyk:
+            cmyk = ct.GetChildMemberWithName("acmyk")
+            a = div257(cmyk.GetChildMemberWithName("alpha"))
+            c = div257(cmyk.GetChildMemberWithName("cyan"))
+            m = div257(cmyk.GetChildMemberWithName("magenta"))
+            y = div257(cmyk.GetChildMemberWithName("yellow"))
+            k = div257(cmyk.GetChildMemberWithName("black"))
+            if a != 255:
+                return f"cmyka({c}, {m}, {y}, {k}, {a})"
+            return f"cmyk({c}, {m}, {y}, {k})"
+        case QColorSpec.Hsl:
+            hsl = ct.GetChildMemberWithName("ahsl")
+            a = div257(hsl.GetChildMemberWithName("alpha"))
+            h = hsl.GetChildMemberWithName("hue").GetValueAsUnsigned()
+            h = -1 if h == 0xFFFF else int(h / 100)
+            s = div257(hsl.GetChildMemberWithName("saturation"))
+            l = div257(hsl.GetChildMemberWithName("lightness"))
+            if a != 255:
+                return f"hsla({h}, {s}, {l}, {a})"
+            return f"hsl({h}, {s}, {l})"
+        case QColorSpec.ExtendedRgb:
+            argb = ct.GetChildMemberWithName("argbExtended")
+            a = f16_to_float(
+                argb.GetChildMemberWithName("alphaF16").GetValueAsUnsigned()
+            )
+            r = f16_to_float(argb.GetChildMemberWithName("redF16").GetValueAsUnsigned())
+            g = f16_to_float(
+                argb.GetChildMemberWithName("greenF16").GetValueAsUnsigned()
+            )
+            b = f16_to_float(
+                argb.GetChildMemberWithName("blueF16").GetValueAsUnsigned()
+            )
+            if a != 1.0:
+                return f"ergba({r}, {g}, {b}, {a})"
+            return f"ergb({r}, {g}, {b})"
+        case x:
+            return f"unknown(spec={x})"
 
 
 def get_sizet_ptr(target: SBTarget) -> SBType:
@@ -573,15 +649,18 @@ class QSpanSyntheticProvider(_ArraySyntheticProvider):
         else:
             ty = valobj.GetType().GetCanonicalType()
             f = (
-                ty
-                .GetDirectBaseClassAtIndex(0)
+                ty.GetDirectBaseClassAtIndex(0)
                 .GetType()
                 .GetStaticFieldWithName("m_size")
             )
             if f:
-                self._csize = f.GetConstantValue(valobj.GetTarget()).GetValueAsUnsigned()
+                self._csize = f.GetConstantValue(
+                    valobj.GetTarget()
+                ).GetValueAsUnsigned()
             else:
-                self._csize = ty.GetTemplateArgumentValue(valobj.GetTarget(),1).GetValueAsUnsigned()
+                self._csize = ty.GetTemplateArgumentValue(
+                    valobj.GetTarget(), 1
+                ).GetValueAsUnsigned()
 
     def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue, int]:
         ptr: SBValue = valobj.GetChildMemberWithName("m_data")
@@ -633,7 +712,9 @@ class QVarLengthArraySyntheticProvider(_ArraySyntheticProvider):
             "value_type"
         ).GetTypedefedType()
         if not self._arr_type:
-            self._arr_type = valobj.GetType().GetCanonicalType().GetTemplateArgumentType(0)
+            self._arr_type = (
+                valobj.GetType().GetCanonicalType().GetTemplateArgumentType(0)
+            )
 
     def _pointer_and_size(self, valobj: SBValue) -> tuple[SBValue, int]:
         ptr = valobj.GetChildMemberWithName("ptr").Cast(self._arr_type.GetPointerType())
@@ -1008,7 +1089,12 @@ class QHashSyntheticProvider:
         d: SBValue = self._valobj.GetChildMemberWithName("d")
         self._node_ty = self._valobj.type.FindDirectNestedType("Node")
         if not self._node_ty:
-            self._node_ty = d.GetType().GetPointeeType().GetCanonicalType().GetTemplateArgumentType(0)
+            self._node_ty = (
+                d.GetType()
+                .GetPointeeType()
+                .GetCanonicalType()
+                .GetTemplateArgumentType(0)
+            )
         self._size = d.GetChildMemberWithName("size").unsigned
         self._num_buckets = d.GetChildMemberWithName("numBuckets").unsigned
         self._spans: SBValue = d.GetChildMemberWithName("spans")
@@ -2152,7 +2238,7 @@ class QImageSyntheticProvider:
 
     def has_children(self):
         return True
-    
+
     @staticmethod
     def _get_d_and_address(valobj: SBValue):
         d = valobj.GetChildMemberWithName("d")
@@ -2164,7 +2250,9 @@ class QImageSyntheticProvider:
                 # Clang doesn't include the type size
                 sz = 24
             d_off = sz - 8
-            return d, valobj.GetProcess().ReadPointerFromMemory(valobj.GetLoadAddress() + d_off, SBError())
+            return d, valobj.GetProcess().ReadPointerFromMemory(
+                valobj.GetLoadAddress() + d_off, SBError()
+            )
         return d, 0
 
     def update(self):
@@ -2429,14 +2517,16 @@ class QUrlSyntheticProvider:
 
     def has_children(self):
         return True
-    
+
     @staticmethod
     def _get_d_address(valobj: SBValue):
         d = valobj.GetChildMemberWithName("d")
         if d:
             return d.GetValueAsAddress()
         else:
-            return valobj.GetProcess().ReadPointerFromMemory(valobj.GetLoadAddress(), SBError())
+            return valobj.GetProcess().ReadPointerFromMemory(
+                valobj.GetLoadAddress(), SBError()
+            )
 
     def update(self):
         self._scheme = None

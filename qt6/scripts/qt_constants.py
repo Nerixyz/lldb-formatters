@@ -115,3 +115,12 @@ class QtCborElementValueFlag:
     HasByteData = 0x0002
     StringIsUtf16 = 0x0004
     StringIsAscii = 0x0008
+
+
+class QColorSpec:
+    Invalid = 0
+    Rgb = 1
+    Hsv = 2
+    Cmyk = 3
+    Hsl = 4
+    ExtendedRgb = 5

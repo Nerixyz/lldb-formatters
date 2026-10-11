@@ -19,6 +19,7 @@ Types marked with 🧪 have improved formatting if debug info for private types 
 - [ ] `QCborValue` 🟡 (only the JSON subset)
 - [x] `QCheckedInt<*>`
 - [x] `QChar`
+- [x] `QColor`
 - [x] `QDate`
 - [x] `QDateTime`
 - [x] `QDir` (🧪)
