@@ -154,10 +154,10 @@ class TestQVariant(testlib.TestCase):
         self.assertVarPath(
             "vQChar",
             ValueCheck(
-                value="U+00e4",
+                value=re.compile(r"^U\+00[eE]4$"),
                 children=[
                     ValueCheck(name="[Type]", summary='"QChar"'),
-                    ValueCheck(name="[Value]", value="U+00e4"),
+                    ValueCheck(name="[Value]", value=re.compile(r"^U\+00[eE]4$")),
                 ],
             ),
         )
@@ -241,7 +241,9 @@ class TestQVariant(testlib.TestCase):
             ),
         )
         self.assertVarPath("vChar16", ValueCheck(value="U+0056"))
-        self.assertVarPath("vChar32", ValueCheck(value="U+0x00000056"))
+        self.assertVarPath(
+            "vChar32", ValueCheck(value=re.compile(r"^U\+(0x00000056|0056)$"))
+        )
         self.assertVarPath("vNullptr", ValueCheck(summary="(null)"))
 
         self.assertVarPath(

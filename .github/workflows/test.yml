@@ -30,31 +30,27 @@ jobs:
 
           - os: ubuntu-24.04
             compiler: gcc
+    permissions: {}
 
     name: 🧪 Test on ${{ matrix.os }}${{ case(matrix.compiler == '', '', format(' with {0}', matrix.compiler)) }}${{ case(matrix.preset == '', '', format(' [{0}]', matrix.preset)) }}
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: 🪟 Install LLVM and Clang
-        uses: Nerixyz/install-llvm-action@9360934cdd190acb71725924f8d8ebd7a1acdf93
+        uses: Nerixyz/install-llvm-action@7372aab026498959cff47c82953ba378477d4b00
         if: runner.os == 'Windows'
         with:
-          version: "22.1"
-
-      - name: 🪟 🐛 Fix LLDB .pyd
-        shell: powershell
-        if: runner.os == 'Windows'
-        run: |
-          mv "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.abi3None" "C:\Program Files\LLVM\Lib\site-packages\lldb\native\_lldb.pyd"
+          version: "23.1"
 
       - name: 🪟 Enable Developer Command Prompt
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1.13.0
+        uses: Chatterino/msvc-dev-cmd@24444121cb2805a7adbd23d0f4455d0916af896b # v2.0.7
 
       - name: 🪟 Use clang-cl
         shell: bash
@@ -67,11 +63,11 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main'
+          sudo add-apt-repository -y 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-23 main'
           sudo apt update
-          sudo apt install lldb-22
-          sudo update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-22 10
-          echo "LLDB_DEBUGSERVER_PATH=$(which lldb-server-22)" >> "$GITHUB_ENV"
+          sudo apt install lldb-23
+          sudo update-alternatives --install /usr/bin/lldb lldb /usr/bin/lldb-23 10
+          echo "LLDB_DEBUGSERVER_PATH=$(which lldb-server-23)" >> "$GITHUB_ENV"
 
       - name: 🐧 Use GCC
         if: runner.os == 'Linux' && matrix.compiler == 'gcc'
@@ -94,23 +90,25 @@ jobs:
           echo "$(dirname $(xcrun -f python3))" >> "$GITHUB_PATH"
 
       - name: Install Qt6
-        uses: jurplel/install-qt-action@v4.3.1
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
         with:
           cache: true
           cache-key-prefix: ${{ runner.os }}-Qt
-          version: 6.10.3
-
-      - name: 🪟 Install Python
-        uses: actions/setup-python@v6
-
-        if: runner.os == 'Windows'
-        with:
-          python-version: "3.11" # Matches the python used in LLDB
+          # https://github.com/miurahr/aqtinstall/pull/1052
+          aqtsource: git+https://github.com/pzhlkj6612/forked-aqtinstall@7b60b0f64e2fdd28552d7603e9831b027172afb0
+          version: 6.12.0
 
       - name: Install conan
         run: |
-          pip install conan
+          pip install "conan==2.33.0"
           conan profile detect -f
+
+      - name: 🪟 Fixup conan
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $file = "$(conan profile path default)"
+          (Get-Content -Path $file) -replace "v143", "v145" | Set-Content $file
 
       - name: 🪟 Configure
         if: runner.os == 'Windows'
@@ -135,3 +133,12 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest -j2 --output-on-failure
+
+  collect:
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - run: jq --exit-status 'all(.result == "success")' <<< '${{ toJson(needs) }}'
+      - name: Done
+        run: exit 0
