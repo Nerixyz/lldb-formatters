@@ -46,11 +46,11 @@ jobs:
         uses: Nerixyz/install-llvm-action@862e3feb913470afc27f2303d756c3e1ccd9c131
         if: runner.os == 'Windows'
         with:
-          version: 23
+          version: "23.1"
 
       - name: 🪟 Enable Developer Command Prompt
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        uses: Chatterino/msvc-dev-cmd@24444121cb2805a7adbd23d0f4455d0916af896b # v2.0.7
 
       - name: 🪟 Use clang-cl
         shell: bash
