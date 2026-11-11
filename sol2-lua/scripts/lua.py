@@ -47,6 +47,20 @@ def __lldb_init_module(dbg: SBDebugger, internal_dict):
     add_summary("SolBasicReference", regex=any_ref_re)
 
 
+def _tt_child_val(v: SBValue):
+    tt = v.GetChildMemberWithName("tt_")
+    if not tt:
+        tt = v.GetChildMemberWithName("tt")
+    return _tt_val(tt)
+
+
+def _value_child(v: SBValue):
+    val = v.GetChildMemberWithName("value_")
+    if val:
+        return val
+    return v.GetChildMemberWithName("value")
+
+
 def _tt_val(v: SBValue):
     return v.GetValueAsUnsigned() & 0b11_1111
 
@@ -55,7 +69,7 @@ def TValueSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> Optional[str]:
     raw: SBValue = valobj.GetNonSyntheticValue()
-    tt = _tt_val(raw.GetChildMemberWithName("tt_"))
+    tt = _tt_child_val(raw)
     if (
         tt == lua_constants.LUA_VNUMFLT
         or tt == lua_constants.LUA_VNUMINT
@@ -65,17 +79,26 @@ def TValueSummaryProvider(
     elif tt == lua_constants.LUA_VLIGHTUSERDATA:
         return "lightuserdata"
     else:
-        return _value_summary(raw.GetChildMemberWithName("value_"), tt)
+        return _value_summary(_value_child(raw), tt)
 
 
 def TStringSummaryProvider(
     valobj: SBValue, internal_dict: dict, options: lldb.SBTypeSummaryOptions
 ) -> Optional[str]:
-    len = valobj.GetNumChildren()
     raw: SBValue = valobj.GetNonSyntheticValue()
+    contents = raw.GetChildMemberWithName("contents")
+    if contents:
+        len = valobj.GetNumChildren()
+        return contents.Cast(
+            valobj.GetTarget().GetBasicType(lldb.eBasicTypeChar).GetArrayType(len)
+        ).GetSummary()
+    tsv = raw.GetChildMemberWithName("tsv")
+    off = tsv.GetType().GetByteSize()
     return (
-        raw.GetChildMemberWithName("contents")
-        .Cast(valobj.GetTarget().GetBasicType(lldb.eBasicTypeChar).GetArrayType(len))
+        raw.CreateChildAtOffset(
+            "", off, valobj.GetTarget().GetBasicType(lldb.eBasicTypeChar)
+        )
+        .AddressOf()
         .GetSummary()
     )
 
@@ -144,8 +167,13 @@ class TableSyntheticProvider:
 
     def _named_child_at_index(self, named: SBValue):
         u = named.GetChildMemberWithName("u")
-        key_tt = _tt_val(u.GetChildMemberWithName("key_tt"))
-        key_val = u.GetChildMemberWithName("key_val")
+        if u:
+            key_tt = _tt_val(u.GetChildMemberWithName("key_tt"))
+            key_val = u.GetChildMemberWithName("key_val")
+        else:
+            kv = named.GetChildMemberWithName("i_key").GetChildMemberWithName("tvk")
+            key_tt = _tt_child_val(kv)
+            key_val = _value_child(kv)
         key_name = f"[{_value_summary(key_val, key_tt, self._ty_tstring_ptr)}]"
         return _maybe_unwrap(named.GetChildMemberWithName("i_val")).Clone(key_name)
 
@@ -156,7 +184,10 @@ class TableSyntheticProvider:
         meta = self._valobj.GetChildMemberWithName("metatable")
         if meta.GetValueAsAddress() != 0:
             self._metatable = meta.Clone("[metatable]")
-        alimit = self._valobj.GetChildMemberWithName("alimit").GetValueAsUnsigned()
+        alimit_val = self._valobj.GetChildMemberWithName("alimit")
+        if not alimit_val:
+            alimit_val = self._valobj.GetChildMemberWithName("sizearray")
+        alimit = alimit_val.GetValueAsUnsigned()
         array: SBValue = self._valobj.GetChildMemberWithName("array")
         named_size = (
             1 << self._valobj.GetChildMemberWithName("lsizenode").GetValueAsUnsigned()
@@ -169,7 +200,7 @@ class TableSyntheticProvider:
                 it = array.CreateChildAtOffset(
                     "", self._tvalue_size * i, self._ty_tvalue
                 )
-                tt = _tt_val(it.GetChildMemberWithName("tt_"))
+                tt = _tt_child_val(it)
                 if (tt & 0b1111) != 0:
                     self._arr_children.append(it.Clone(f"[{i + 1}]"))
         # get named children
@@ -178,9 +209,13 @@ class TableSyntheticProvider:
                 it = node_start.CreateChildAtOffset(
                     "", self._node_size * i, self._ty_node
                 )
-                key_tt = _tt_val(
-                    it.GetChildMemberWithName("u").GetChildMemberWithName("key_tt")
-                )
+                u = it.GetChildMemberWithName("u")
+                if u:
+                    key_tt = _tt_val(u.GetChildMemberWithName("key_tt"))
+                else:
+                    key_tt = _tt_child_val(
+                        it.GetChildMemberWithName("i_key").GetChildMemberWithName("tvk")
+                    )
                 if (key_tt & 0b1111) != 0:
                     self._named_children.append(it)
 
@@ -191,9 +226,9 @@ class TableSyntheticProvider:
 
 
 def _maybe_unwrap(tvalue: SBValue) -> SBValue:
-    tt = _tt_val(tvalue.GetChildMemberWithName("tt_"))
+    tt = _tt_child_val(tvalue)
     if tt == lua_constants.LUA_VLCF:
-        return tvalue.GetChildMemberWithName("value_").GetChildMemberWithName("f")
+        return _value_child(tvalue).GetChildMemberWithName("f")
     return tvalue
 
 
@@ -238,11 +273,11 @@ class TValueSyntheticProvider:
     def update(self):
         self._value = None
         self._expand = None
-        tt = _tt_val(self._valobj.GetChildMemberWithName("tt_"))
+        tt = _tt_child_val(self._valobj)
         self._arr_children = []
         self._named_children = []
         self._metatable = None
-        val_union = self._valobj.GetChildMemberWithName("value_")
+        val_union = _value_child(self._valobj)
         if tt == lua_constants.LUA_VTHREAD:
             self._expand = self._get_gco(val_union, "lua_State")
         elif tt == lua_constants.LUA_VNUMINT:
@@ -321,7 +356,11 @@ class LuaStateSyntheticProvider:
         self._global_state = None
         self._ty_tvalue = valobj.GetTarget().FindFirstType("TValue")
         ty_stack_value = valobj.GetTarget().FindFirstType("StackValue")
-        self._stack_value_size = ty_stack_value.GetByteSize()
+        if ty_stack_value:
+            self._stack_value_size = ty_stack_value.GetByteSize()
+        else:
+            # e.g. Lua 5.1
+            self._stack_value_size = self._ty_tvalue.GetByteSize()
 
     def num_children(self):
         return 1 + self._n_stack
@@ -352,15 +391,11 @@ class LuaStateSyntheticProvider:
         ci = self._valobj.GetChildMemberWithName("ci")
         if ci.GetValueAsAddress() == 0:
             return False
-        self._stack_begin = ci.GetChildMemberWithName("func").GetChildMemberWithName(
-            "p"
-        )
+        self._stack_begin = _stack_val_ptr(ci.GetChildMemberWithName("func"))
         f_addr = self._stack_begin.GetValueAsAddress()  # type: ignore
-        top_addr = (
+        top_addr = _stack_val_ptr(
             self._valobj.GetChildMemberWithName("top")
-            .GetChildMemberWithName("p")
-            .GetValueAsAddress()
-        )
+        ).GetValueAsAddress()
         if top_addr < f_addr:
             return False
         self._n_stack = (top_addr - f_addr) // self._stack_value_size
@@ -368,6 +403,13 @@ class LuaStateSyntheticProvider:
 
     def has_children(self):
         return True
+
+
+def _stack_val_ptr(vo: SBValue):
+    v = vo.GetChildMemberWithName("p")
+    if not v:
+        return vo
+    return v
 
 
 class UdataSyntheticProvider:
@@ -544,13 +586,11 @@ class SolBasicReferenceSyntheticProvider(ExpandingSyntheticProvider):
             return False
 
         l_reg: SBValue = l_g.GetChildMemberWithName("l_registry")
-        l_reg_tt = _tt_val(l_reg.GetChildMemberWithName("tt_"))
+        l_reg_tt = _tt_child_val(l_reg)
         if l_reg_tt != lua_constants.LUA_TTABLE:
             return False  # not a table?
         l_reg_table: SBValue = (
-            l_reg.GetChildMemberWithName("value_")
-            .GetChildMemberWithName("gc")
-            .Cast(self._ty_table)
+            _value_child(l_reg).GetChildMemberWithName("gc").Cast(self._ty_table)
         )
         alimit = l_reg_table.GetChildMemberWithName("alimit").GetValueAsUnsigned()
         if ref > alimit:
